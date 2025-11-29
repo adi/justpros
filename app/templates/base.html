@@ -41,24 +41,24 @@
     </script>
     <script src="https://unpkg.com/htmx.org@2.0.8"></script>
 </head>
-<body class="min-h-screen bg-gray-50 flex flex-col">
+<body class="min-h-screen bg-gray-50 flex flex-col min-w-[372px]">
     <nav class="bg-white shadow-sm">
-        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-2 sm:gap-4">
+            <div class="flex items-center gap-2 sm:gap-3 flex-shrink min-w-0">
                 <a href="/" class="flex-shrink-0">
                     <img src="/static/logo.svg" alt="JustPros" class="w-8 h-8">
                 </a>
                 <input type="text" id="search" placeholder="Search"
-                    class="w-64 px-3 py-1.5 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-blue text-sm">
+                    class="w-32 sm:w-64 px-3 py-1.5 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-blue text-sm">
             </div>
-            <div id="nav-guest" class="flex gap-4 items-center">
-                <a href="/login" class="text-gray-600 hover:text-gray-900">Log in</a>
-                <a href="/signup" class="bg-brand-blue text-white px-4 py-1.5 rounded-md hover:opacity-90">Sign up</a>
+            <div id="nav-guest" class="flex gap-2 sm:gap-4 items-center flex-shrink-0">
+                <a href="/login" class="text-gray-600 hover:text-gray-900 text-sm sm:text-base">Log in</a>
+                <a href="/signup" class="bg-brand-blue text-white px-3 sm:px-4 py-1.5 rounded-md hover:opacity-90 text-sm sm:text-base whitespace-nowrap">Sign up</a>
             </div>
-            <div id="nav-user" class="hidden flex gap-4 items-center">
-                <a href="/profile" class="text-gray-600 hover:text-gray-900">Profile</a>
-                <a href="/settings" class="text-gray-600 hover:text-gray-900">Settings</a>
-                <button onclick="logout()" class="text-gray-600 hover:text-gray-900">Log out</button>
+            <div id="nav-user" class="hidden flex gap-2 sm:gap-4 items-center flex-shrink-0">
+                <a href="/profile" class="text-gray-600 hover:text-gray-900 text-sm sm:text-base">Profile</a>
+                <a href="/settings" class="text-gray-600 hover:text-gray-900 text-sm sm:text-base">Settings</a>
+                <button onclick="logout()" class="text-gray-600 hover:text-gray-900 text-sm sm:text-base whitespace-nowrap">Log out</button>
             </div>
         </div>
     </nav>
