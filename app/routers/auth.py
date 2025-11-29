@@ -74,7 +74,7 @@ async def signup(
         },
     )
 
-    send_verification_email(email, verification_token)
+    send_verification_email(email, verification_token, first_name)
 
     return '<p class="text-green-600">Check your email to verify your account</p>'
 
@@ -157,7 +157,7 @@ async def forgot_password(
     email: Annotated[EmailStr, Form()],
 ) -> str:
     user = await database.fetch_one(
-        "SELECT id, email FROM users WHERE email = :email",
+        "SELECT id, email, first_name FROM users WHERE email = :email",
         {"email": email},
     )
 
@@ -180,7 +180,7 @@ async def forgot_password(
             },
         )
 
-        send_password_reset_email(user["email"], reset_token)
+        send_password_reset_email(user["email"], reset_token, user["first_name"])
 
     # Always return success to prevent email enumeration
     return '<p class="text-green-600">If that email exists, we sent a reset link</p>'
