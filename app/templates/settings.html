@@ -6,22 +6,12 @@
 
     <div class="space-y-8">
         <section class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-semibold text-gray-900 mb-4">Edit Profile</h2>
-            <form id="profile-form" class="space-y-4">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Edit Account</h2>
+            <form id="account-form" class="space-y-4">
                 <div>
-                    <label for="handle" class="block text-sm font-medium text-gray-700 mb-1">Handle</label>
-                    <div class="flex gap-2">
-                        <div class="flex-grow relative">
-                            <span class="absolute left-3 top-2 text-gray-400">@</span>
-                            <input type="text" id="handle" name="handle" required pattern="[a-z0-9_]+" maxlength="30"
-                                class="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
-                        </div>
-                        <button type="button" onclick="checkHandle()"
-                            class="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm">
-                            Check
-                        </button>
-                    </div>
-                    <p id="handle-status" class="text-sm mt-1"></p>
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="email" name="email" readonly
+                        class="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-500">
                 </div>
                 <div>
                     <label for="first_name" class="block text-sm font-medium text-gray-700 mb-1">First name</label>
@@ -38,18 +28,7 @@
                     <input type="text" id="last_name" name="last_name" required
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
                 </div>
-                <div>
-                    <label for="headline" class="block text-sm font-medium text-gray-700 mb-1">Headline</label>
-                    <input type="text" id="headline" name="headline" maxlength="200" placeholder="What do you do?"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
-                </div>
-                <div>
-                    <label for="skills" class="block text-sm font-medium text-gray-700 mb-1">Skills</label>
-                    <input type="text" id="skills" name="skills" placeholder="Python, FastAPI, Design (comma-separated)"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
-                    <p class="text-sm text-gray-500 mt-1">Separate skills with commas</p>
-                </div>
-                <div id="profile-message"></div>
+                <div id="account-message"></div>
                 <button type="submit"
                     class="bg-brand-blue text-white px-4 py-2 rounded-md hover:opacity-90">
                     Save Changes
@@ -150,72 +129,7 @@
         }
     }
 
-    let handleAvailable = null;
-
-    async function checkHandle() {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            window.location.href = '/login';
-            return;
-        }
-
-        const handle = document.getElementById('handle').value.toLowerCase();
-        const original = document.getElementById('handle').dataset.original;
-        const statusEl = document.getElementById('handle-status');
-
-        if (!handle) {
-            statusEl.textContent = '';
-            handleAvailable = null;
-            return;
-        }
-
-        if (!/^[a-z0-9_]+$/.test(handle)) {
-            statusEl.textContent = 'Only lowercase letters, numbers, and underscores allowed';
-            statusEl.className = 'text-sm mt-1 text-red-600';
-            handleAvailable = false;
-            return;
-        }
-
-        if (handle === original) {
-            statusEl.textContent = 'This is your current handle';
-            statusEl.className = 'text-sm mt-1 text-gray-500';
-            handleAvailable = true;
-            return;
-        }
-
-        statusEl.textContent = 'Checking...';
-        statusEl.className = 'text-sm mt-1 text-gray-500';
-
-        try {
-            const response = await fetch(`/api/handle/check?handle=${encodeURIComponent(handle)}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (response.status === 429) {
-                statusEl.textContent = 'Too many checks. Please wait.';
-                statusEl.className = 'text-sm mt-1 text-red-600';
-                handleAvailable = null;
-                return;
-            }
-
-            const data = await response.json();
-            if (data.available) {
-                statusEl.textContent = 'Available!';
-                statusEl.className = 'text-sm mt-1 text-green-600';
-                handleAvailable = true;
-            } else {
-                statusEl.textContent = 'Already taken';
-                statusEl.className = 'text-sm mt-1 text-red-600';
-                handleAvailable = false;
-            }
-        } catch (error) {
-            statusEl.textContent = 'Error checking handle';
-            statusEl.className = 'text-sm mt-1 text-red-600';
-            handleAvailable = null;
-        }
-    }
-
-    async function loadProfile() {
+    async function loadAccount() {
         const token = localStorage.getItem('token');
         if (!token) {
             window.location.href = '/login';
@@ -234,19 +148,16 @@
             }
 
             const data = await response.json();
-            document.getElementById('handle').value = data.handle || '';
-            document.getElementById('handle').dataset.original = data.handle || '';
+            document.getElementById('email').value = data.email || '';
             document.getElementById('first_name').value = data.first_name || '';
             document.getElementById('middle_name').value = data.middle_name || '';
             document.getElementById('last_name').value = data.last_name || '';
-            document.getElementById('headline').value = data.headline || '';
-            document.getElementById('skills').value = (data.skills || []).join(', ');
         } catch (error) {
-            console.error('Failed to load profile:', error);
+            console.error('Failed to load account:', error);
         }
     }
 
-    document.getElementById('profile-form').addEventListener('submit', async (e) => {
+    document.getElementById('account-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const token = localStorage.getItem('token');
         if (!token) {
@@ -254,11 +165,7 @@
             return;
         }
 
-        const messageEl = document.getElementById('profile-message');
-        const skills = document.getElementById('skills').value
-            .split(',')
-            .map(s => s.trim())
-            .filter(s => s.length > 0);
+        const messageEl = document.getElementById('account-message');
 
         try {
             const response = await fetch('/api/me', {
@@ -268,12 +175,9 @@
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    handle: document.getElementById('handle').value,
                     first_name: document.getElementById('first_name').value,
                     middle_name: document.getElementById('middle_name').value || null,
-                    last_name: document.getElementById('last_name').value,
-                    headline: document.getElementById('headline').value || null,
-                    skills: skills
+                    last_name: document.getElementById('last_name').value
                 })
             });
 
@@ -284,21 +188,21 @@
             }
 
             if (response.ok) {
-                messageEl.innerHTML = '<p class="text-green-600">Profile updated!</p>';
+                messageEl.innerHTML = '<p class="text-green-600">Account updated!</p>';
             } else {
                 const data = await response.json();
-                messageEl.innerHTML = `<p class="text-red-600">${data.detail || 'Failed to update profile'}</p>`;
+                messageEl.innerHTML = `<p class="text-red-600">${data.detail || 'Failed to update account'}</p>`;
             }
         } catch (error) {
-            messageEl.innerHTML = '<p class="text-red-600">Failed to update profile. Please try again.</p>';
+            messageEl.innerHTML = '<p class="text-red-600">Failed to update account. Please try again.</p>';
         }
     });
 
-    // Redirect if not logged in, otherwise load profile
+    // Redirect if not logged in, otherwise load account
     if (!localStorage.getItem('token')) {
         window.location.href = '/login';
     } else {
-        loadProfile();
+        loadAccount();
     }
 </script>
 {% endblock %}

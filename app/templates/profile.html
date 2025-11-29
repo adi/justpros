@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Profile - JustPros{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <h1 class="text-3xl font-bold text-gray-900 mb-8">Edit Profile</h1>
+
+    <div class="space-y-8">
+        <section class="bg-white rounded-lg shadow p-6">
+            <form id="profile-form" class="space-y-4">
+                <div>
+                    <label for="handle" class="block text-sm font-medium text-gray-700 mb-1">Handle</label>
+                    <div class="flex gap-2">
+                        <div class="flex-grow relative">
+                            <span class="absolute left-3 top-2 text-gray-400">@</span>
+                            <input type="text" id="handle" name="handle" required pattern="[a-z0-9_]+" maxlength="30"
+                                class="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                        </div>
+                        <button type="button" onclick="checkHandle()"
+                            class="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm">
+                            Check
+                        </button>
+                    </div>
+                    <p id="handle-status" class="text-sm mt-1"></p>
+                </div>
+                <div>
+                    <label for="headline" class="block text-sm font-medium text-gray-700 mb-1">Headline</label>
+                    <input type="text" id="headline" name="headline" maxlength="200" placeholder="What do you do?"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                </div>
+                <div>
+                    <label for="skills" class="block text-sm font-medium text-gray-700 mb-1">Skills</label>
+                    <input type="text" id="skills" name="skills" placeholder="Python, FastAPI, Design (comma-separated)"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                    <p class="text-sm text-gray-500 mt-1">Separate skills with commas</p>
+                </div>
+                <div id="profile-message"></div>
+                <button type="submit"
+                    class="bg-brand-blue text-white px-4 py-2 rounded-md hover:opacity-90">
+                    Save Changes
+                </button>
+            </form>
+        </section>
+    </div>
+</div>
+
+<script>
+    let handleAvailable = null;
+
+    async function checkHandle() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        const handle = document.getElementById('handle').value.toLowerCase();
+        const original = document.getElementById('handle').dataset.original;
+        const statusEl = document.getElementById('handle-status');
+
+        if (!handle) {
+            statusEl.textContent = '';
+            handleAvailable = null;
+            return;
+        }
+
+        if (!/^[a-z0-9_]+$/.test(handle)) {
+            statusEl.textContent = 'Only lowercase letters, numbers, and underscores allowed';
+            statusEl.className = 'text-sm mt-1 text-red-600';
+            handleAvailable = false;
+            return;
+        }
+
+        if (handle === original) {
+            statusEl.textContent = 'This is your current handle';
+            statusEl.className = 'text-sm mt-1 text-gray-500';
+            handleAvailable = true;
+            return;
+        }
+
+        statusEl.textContent = 'Checking...';
+        statusEl.className = 'text-sm mt-1 text-gray-500';
+
+        try {
+            const response = await fetch(`/api/handle/check?handle=${encodeURIComponent(handle)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.status === 429) {
+                statusEl.textContent = 'Too many checks. Please wait.';
+                statusEl.className = 'text-sm mt-1 text-red-600';
+                handleAvailable = null;
+                return;
+            }
+
+            const data = await response.json();
+            if (data.available) {
+                statusEl.textContent = 'Available!';
+                statusEl.className = 'text-sm mt-1 text-green-600';
+                handleAvailable = true;
+            } else {
+                statusEl.textContent = 'Already taken';
+                statusEl.className = 'text-sm mt-1 text-red-600';
+                handleAvailable = false;
+            }
+        } catch (error) {
+            statusEl.textContent = 'Error checking handle';
+            statusEl.className = 'text-sm mt-1 text-red-600';
+            handleAvailable = null;
+        }
+    }
+
+    async function loadProfile() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/me', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+                return;
+            }
+
+            const data = await response.json();
+            document.getElementById('handle').value = data.handle || '';
+            document.getElementById('handle').dataset.original = data.handle || '';
+            document.getElementById('headline').value = data.headline || '';
+            document.getElementById('skills').value = (data.skills || []).join(', ');
+        } catch (error) {
+            console.error('Failed to load profile:', error);
+        }
+    }
+
+    document.getElementById('profile-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        const messageEl = document.getElementById('profile-message');
+        const skills = document.getElementById('skills').value
+            .split(',')
+            .map(s => s.trim())
+            .filter(s => s.length > 0);
+
+        try {
+            const response = await fetch('/api/me', {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    handle: document.getElementById('handle').value,
+                    headline: document.getElementById('headline').value || null,
+                    skills: skills
+                })
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+                return;
+            }
+
+            if (response.ok) {
+                messageEl.innerHTML = '<p class="text-green-600">Profile updated!</p>';
+            } else {
+                const data = await response.json();
+                messageEl.innerHTML = `<p class="text-red-600">${data.detail || 'Failed to update profile'}</p>`;
+            }
+        } catch (error) {
+            messageEl.innerHTML = '<p class="text-red-600">Failed to update profile. Please try again.</p>';
+        }
+    });
+
+    // Redirect if not logged in, otherwise load profile
+    if (!localStorage.getItem('token')) {
+        window.location.href = '/login';
+    } else {
+        loadProfile();
+    }
+</script>
+{% endblock %}

@@ -36,6 +36,11 @@ async def terms_page(request: Request) -> HTMLResponse:
     return request.app.state.templates.TemplateResponse(request, "terms.html")
 
 
+@router.get("/profile", response_class=HTMLResponse)
+async def profile_page(request: Request) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(request, "profile.html")
+
+
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request) -> HTMLResponse:
     return request.app.state.templates.TemplateResponse(request, "settings.html")
