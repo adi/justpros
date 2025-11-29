@@ -8,5 +8,5 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
 ]
 
-[tool.uv]
-dev-dependencies = []
+[dependency-groups]
+dev = []
