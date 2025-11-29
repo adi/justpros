@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from app.db import database
+from app.storage import get_avatar_url, get_cover_url
+
 router = APIRouter(tags=["pages"])
 
 
@@ -48,6 +51,36 @@ async def settings_page(request: Request) -> HTMLResponse:
 
 @router.api_route("/u/{handle}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def public_profile_page(request: Request, handle: str) -> HTMLResponse:
+    # Fetch user data for OG meta tags
+    user = await database.fetch_one(
+        """
+        SELECT handle, first_name, middle_name, last_name, headline, avatar_path, cover_path
+        FROM users WHERE handle = :handle
+        """,
+        {"handle": handle.lower()},
+    )
+
+    context = {"handle": handle}
+
+    if user:
+        first_name = user["first_name"] or ""
+        middle_name = user["middle_name"]
+        last_name = user["last_name"] or ""
+        full_name = (
+            f"{first_name} {middle_name} {last_name}".replace("  ", " ").strip()
+            if middle_name
+            else f"{first_name} {last_name}".strip()
+        )
+        context["name"] = full_name or handle
+        context["headline"] = user["headline"] or ""
+        context["og_image"] = (
+            get_cover_url(user["cover_path"])
+            if user["cover_path"]
+            else get_avatar_url(user["avatar_path"])
+            if user["avatar_path"]
+            else None
+        )
+
     return request.app.state.templates.TemplateResponse(
-        request, "public_profile.html", {"handle": handle}
+        request, "public_profile.html", context
     )
