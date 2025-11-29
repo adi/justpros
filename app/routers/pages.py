@@ -74,11 +74,7 @@ async def public_profile_page(request: Request, handle: str) -> HTMLResponse:
         context["name"] = full_name or handle
         context["headline"] = user["headline"] or ""
         context["og_image"] = (
-            get_cover_url(user["cover_path"])
-            if user["cover_path"]
-            else get_avatar_url(user["avatar_path"])
-            if user["avatar_path"]
-            else None
+            get_avatar_url(user["avatar_path"]) if user["avatar_path"] else None
         )
 
     return request.app.state.templates.TemplateResponse(
