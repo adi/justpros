@@ -8,14 +8,14 @@
     <div class="text-green-500 text-6xl mb-4">&#10003;</div>
     <h1 class="text-2xl font-bold text-gray-900 mb-4">{{ message }}</h1>
     <p class="text-gray-600 mb-6">Your account is now active. You can log in and start using JustPros.</p>
-    <a href="/login" class="inline-block bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700">
+    <a href="/login" class="inline-block bg-brand-blue text-white px-6 py-2 rounded-md hover:opacity-90">
         Log in
     </a>
     {% else %}
     <div class="text-red-500 text-6xl mb-4">&#10007;</div>
     <h1 class="text-2xl font-bold text-gray-900 mb-4">Verification Failed</h1>
     <p class="text-gray-600 mb-6">{{ message }}</p>
-    <a href="/signup" class="inline-block bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700">
+    <a href="/signup" class="inline-block bg-brand-blue text-white px-6 py-2 rounded-md hover:opacity-90">
         Sign up again
     </a>
     {% endif %}

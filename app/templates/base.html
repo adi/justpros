@@ -7,6 +7,20 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            blue: '#1a79e5',
+                            pink: '#f65590',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <script src="https://unpkg.com/htmx.org@2.0.8"></script>
 </head>
 <body class="min-h-screen bg-gray-50 flex flex-col">
@@ -18,7 +32,7 @@
             </a>
             <div id="nav-guest" class="flex gap-4 items-center">
                 <a href="/login" class="text-gray-600 hover:text-gray-900">Log in</a>
-                <a href="/signup" class="bg-blue-600 text-white px-4 py-1.5 rounded-md hover:bg-blue-700">Sign up</a>
+                <a href="/signup" class="bg-brand-blue text-white px-4 py-1.5 rounded-md hover:opacity-90">Sign up</a>
             </div>
             <div id="nav-user" class="hidden flex gap-4 items-center">
                 <a href="/settings" class="text-gray-600 hover:text-gray-900">Settings</a>
