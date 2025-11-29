@@ -17,7 +17,7 @@ jobs:
           key: ${{ secrets.DEPLOY_KEY }}
           script: |
             cd /opt/justpros
-            git fetch --tags
-            git checkout ${{ github.ref_name }}
-            /usr/local/bin/uv sync
+            sudo -u justpros git fetch --tags
+            sudo -u justpros git checkout ${{ github.ref_name }}
+            sudo -u justpros /usr/local/bin/uv sync
             systemctl restart justpros
