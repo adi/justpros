@@ -134,6 +134,8 @@ async def export_my_data(current_user: dict = Depends(get_current_user)) -> dict
         """,
         {"id": user_id},
     )
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     # TODO: Add posts when that table exists
     # posts = await database.fetch_all(
@@ -177,7 +179,8 @@ async def upload_my_avatar(
     current_user: dict = Depends(get_current_user),
 ) -> dict:
     """Upload avatar image."""
-    if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+    content_type = file.content_type
+    if content_type not in ("image/jpeg", "image/png", "image/webp"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only JPEG, PNG, or WebP allowed",
@@ -191,7 +194,7 @@ async def upload_my_avatar(
         )
 
     old_avatar_path = current_user["avatar_path"]
-    avatar_path = upload_avatar(current_user["id"], contents, file.content_type)
+    avatar_path = upload_avatar(current_user["id"], contents, content_type)  # type: ignore[arg-type]
 
     # Delete old avatar only after successful upload
     if old_avatar_path:
