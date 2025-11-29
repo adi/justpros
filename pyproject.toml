@@ -4,9 +4,15 @@ version = "0.1.0"
 description = "A clean, open, no-bullshit professional network"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
+    "fastapi>=0.122.0",
+    "uvicorn[standard]>=0.38.0",
     "databases[asyncpg]>=0.9.0",
+    "jinja2>=3.1.0",
+    "resend>=2.19.0",
+    "bcrypt>=5.0.0",
+    "pyjwt>=2.10.0",
+    "pydantic[email]>=2.12.0",
+    "python-multipart>=0.0.9",
 ]
 
 [dependency-groups]
