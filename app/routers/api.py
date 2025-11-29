@@ -3,7 +3,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, field_validator
 
-from app.auth import get_current_user
+from app.auth import get_current_user, hash_password, verify_password
 from app.db import database
 from app.ratelimit import rate_limit
 from app.storage import delete_avatar, get_avatar_url, upload_avatar
@@ -31,6 +31,18 @@ class ProfileUpdate(BaseModel):
             raise ValueError("Handle must be 3-30 characters")
         if not HANDLE_PATTERN.match(v):
             raise ValueError("Handle can only contain lowercase letters, numbers, and underscores")
+        return v
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
         return v
 
 
@@ -222,3 +234,36 @@ async def delete_my_avatar(
     )
 
     return {"message": "Avatar deleted"}
+
+
+@router.post("/me/password")
+async def change_my_password(
+    payload: PasswordChange,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Change user password."""
+    user_id = current_user["id"]
+
+    # Get current password hash
+    user = await database.fetch_one(
+        "SELECT password_hash FROM users WHERE id = :id",
+        {"id": user_id},
+    )
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Verify current password
+    if not verify_password(payload.current_password, user["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    # Update password
+    new_hash = hash_password(payload.new_password)
+    await database.execute(
+        "UPDATE users SET password_hash = :hash, updated_at = NOW() WHERE id = :id",
+        {"hash": new_hash, "id": user_id},
+    )
+
+    return {"message": "Password changed"}
