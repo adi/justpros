@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -26,6 +26,11 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.include_router(auth.router)
 app.include_router(pages.router)
 app.include_router(api.router)
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    return FileResponse(BASE_DIR / "static" / "favicon.ico")
 
 
 @app.get("/.well-known/appspecific/com.chrome.devtools.json")

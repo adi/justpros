@@ -4,7 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}JustPros{% endblock %}</title>
-    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta name="description" content="{% block description %}A clean, chronological professional network for leaders, builders, creatives, and doers.{% endblock %}">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="{% block og_title %}JustPros{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}A clean, chronological professional network for leaders, builders, creatives, and doers.{% endblock %}">
+    <meta property="og:image" content="https://justpros.org/static/og-image.png">
+    <meta property="og:url" content="https://justpros.org{% block og_url %}{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="JustPros">
+
+    <!-- Twitter/X -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{% block twitter_title %}JustPros{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}A clean, chronological professional network for leaders, builders, creatives, and doers.{% endblock %}">
+    <meta name="twitter:image" content="https://justpros.org/static/og-image.png">
+
+    <!-- Theme color -->
+    <meta name="theme-color" content="#1a79e5">
+
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -25,11 +43,14 @@
 </head>
 <body class="min-h-screen bg-gray-50 flex flex-col">
     <nav class="bg-white shadow-sm">
-        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-            <a href="/" class="flex items-center gap-2">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <a href="/" class="flex-shrink-0">
                 <img src="/static/logo.svg" alt="JustPros" class="w-8 h-8">
-                <span class="font-semibold text-gray-900">JustPros</span>
             </a>
+            <div class="flex-grow max-w-md">
+                <input type="text" id="search" placeholder="Search"
+                    class="w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue text-sm">
+            </div>
             <div id="nav-guest" class="flex gap-4 items-center">
                 <a href="/login" class="text-gray-600 hover:text-gray-900">Log in</a>
                 <a href="/signup" class="bg-brand-blue text-white px-4 py-1.5 rounded-md hover:opacity-90">Sign up</a>
