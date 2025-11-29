@@ -33,6 +33,11 @@ async def favicon():
     return FileResponse(BASE_DIR / "static" / "favicon.ico")
 
 
+@app.get("/robots.txt")
+async def robots():
+    return FileResponse(BASE_DIR / "static" / "robots.txt")
+
+
 @app.get("/.well-known/appspecific/com.chrome.devtools.json")
 async def chrome_devtools():
     return {}
