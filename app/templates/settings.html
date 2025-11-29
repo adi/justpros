@@ -24,8 +24,18 @@
                     <p id="handle-status" class="text-sm mt-1"></p>
                 </div>
                 <div>
-                    <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                    <input type="text" id="name" name="name" required
+                    <label for="first_name" class="block text-sm font-medium text-gray-700 mb-1">First name</label>
+                    <input type="text" id="first_name" name="first_name" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                </div>
+                <div>
+                    <label for="middle_name" class="block text-sm font-medium text-gray-700 mb-1">Middle name <span class="text-gray-400">(optional)</span></label>
+                    <input type="text" id="middle_name" name="middle_name"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                </div>
+                <div>
+                    <label for="last_name" class="block text-sm font-medium text-gray-700 mb-1">Last name</label>
+                    <input type="text" id="last_name" name="last_name" required
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
                 </div>
                 <div>
@@ -226,7 +236,9 @@
             const data = await response.json();
             document.getElementById('handle').value = data.handle || '';
             document.getElementById('handle').dataset.original = data.handle || '';
-            document.getElementById('name').value = data.name || '';
+            document.getElementById('first_name').value = data.first_name || '';
+            document.getElementById('middle_name').value = data.middle_name || '';
+            document.getElementById('last_name').value = data.last_name || '';
             document.getElementById('headline').value = data.headline || '';
             document.getElementById('skills').value = (data.skills || []).join(', ');
         } catch (error) {
@@ -257,7 +269,9 @@
                 },
                 body: JSON.stringify({
                     handle: document.getElementById('handle').value,
-                    name: document.getElementById('name').value,
+                    first_name: document.getElementById('first_name').value,
+                    middle_name: document.getElementById('middle_name').value || null,
+                    last_name: document.getElementById('last_name').value,
                     headline: document.getElementById('headline').value || null,
                     skills: skills
                 })

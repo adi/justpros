@@ -37,7 +37,9 @@ async def signup(
     request: Request,
     email: Annotated[EmailStr, Form()],
     password: Annotated[str, Form()],
-    name: Annotated[str, Form()],
+    first_name: Annotated[str, Form()],
+    last_name: Annotated[str, Form()],
+    middle_name: Annotated[str | None, Form()] = None,
 ) -> str:
     validate_password(password)
 
@@ -57,14 +59,16 @@ async def signup(
 
     await database.execute(
         """
-        INSERT INTO users (handle, email, password_hash, name, verification_token, verification_token_expires)
-        VALUES (:handle, :email, :password_hash, :name, :verification_token, :verification_token_expires)
+        INSERT INTO users (handle, email, password_hash, first_name, middle_name, last_name, verification_token, verification_token_expires)
+        VALUES (:handle, :email, :password_hash, :first_name, :middle_name, :last_name, :verification_token, :verification_token_expires)
         """,
         {
             "handle": handle,
             "email": email,
             "password_hash": password_hash,
-            "name": name,
+            "first_name": first_name,
+            "middle_name": middle_name or None,
+            "last_name": last_name,
             "verification_token": verification_token,
             "verification_token_expires": verification_expires,
         },

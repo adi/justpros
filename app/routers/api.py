@@ -14,7 +14,9 @@ HANDLE_PATTERN = re.compile(r"^[a-z0-9_]+$")
 
 class ProfileUpdate(BaseModel):
     handle: str | None = None
-    name: str | None = None
+    first_name: str | None = None
+    middle_name: str | None = None
+    last_name: str | None = None
     headline: str | None = None
     skills: list[str] | None = None
 
@@ -65,7 +67,9 @@ async def get_my_profile(current_user: dict = Depends(get_current_user)) -> dict
         "id": current_user["id"],
         "handle": current_user["handle"],
         "email": current_user["email"],
-        "name": current_user["name"],
+        "first_name": current_user["first_name"],
+        "middle_name": current_user["middle_name"],
+        "last_name": current_user["last_name"],
         "headline": current_user["headline"],
         "avatar_url": current_user["avatar_url"],
         "skills": current_user["skills"],
@@ -93,8 +97,12 @@ async def update_my_profile(
                 detail="Handle already taken",
             )
         updates["handle"] = payload.handle
-    if payload.name is not None:
-        updates["name"] = payload.name
+    if payload.first_name is not None:
+        updates["first_name"] = payload.first_name
+    if payload.middle_name is not None:
+        updates["middle_name"] = payload.middle_name if payload.middle_name else None
+    if payload.last_name is not None:
+        updates["last_name"] = payload.last_name
     if payload.headline is not None:
         updates["headline"] = payload.headline
     if payload.skills is not None:
@@ -119,7 +127,7 @@ async def export_my_data(current_user: dict = Depends(get_current_user)) -> dict
     # Get full user profile
     user = await database.fetch_one(
         """
-        SELECT handle, email, name, headline, avatar_url, skills, created_at
+        SELECT handle, email, first_name, middle_name, last_name, headline, avatar_url, skills, created_at
         FROM users WHERE id = :id
         """,
         {"id": user_id},
@@ -135,7 +143,9 @@ async def export_my_data(current_user: dict = Depends(get_current_user)) -> dict
         "profile": {
             "handle": user["handle"],
             "email": user["email"],
-            "name": user["name"],
+            "first_name": user["first_name"],
+            "middle_name": user["middle_name"],
+            "last_name": user["last_name"],
             "headline": user["headline"],
             "avatar_url": user["avatar_url"],
             "skills": user["skills"],
