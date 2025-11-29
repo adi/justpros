@@ -190,7 +190,12 @@ async def upload_my_avatar(
             detail="File too large (max 2MB)",
         )
 
+    old_avatar_path = current_user["avatar_path"]
     avatar_path = upload_avatar(current_user["id"], contents, file.content_type)
+
+    # Delete old avatar only after successful upload
+    if old_avatar_path:
+        delete_avatar(old_avatar_path)
 
     await database.execute(
         "UPDATE users SET avatar_path = :path, updated_at = NOW() WHERE id = :id",
