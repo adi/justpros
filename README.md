@@ -1,6 +1,6 @@
 # JustPros
 
-A clean, chronological professional network. No algorithmic nonsense.
+The clean professional network.
 
 ## Stack
 
