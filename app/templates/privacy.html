@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy - JustPros{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <h1 class="text-3xl font-bold text-gray-900 mb-6">Privacy Policy</h1>
+    <p class="text-gray-600 mb-6">Last updated: November 2025</p>
+
+    <div class="space-y-6 text-gray-700">
+        <section>
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">What We Collect</h2>
+            <p>When you create an account, we collect:</p>
+            <ul class="list-disc list-inside mt-2 space-y-1">
+                <li>Your email address (for login and notifications)</li>
+                <li>Your name and profile information you provide</li>
+                <li>Posts and content you create</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">How We Use Your Data</h2>
+            <ul class="list-disc list-inside space-y-1">
+                <li>To provide and improve our service</li>
+                <li>To send you account-related emails (verification, password reset)</li>
+                <li>To display your public profile to other users</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Third-Party Services</h2>
+            <p>We use the following services:</p>
+            <ul class="list-disc list-inside mt-2 space-y-1">
+                <li><strong>Cloudflare</strong> - For security and performance (CDN, DDoS protection)</li>
+                <li><strong>Resend</strong> - For sending transactional emails</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Data Storage</h2>
+            <p>Your data is stored securely in our database. Passwords are hashed using bcrypt and never stored in plain text.</p>
+        </section>
+
+        <section>
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Cookies</h2>
+            <p>We use localStorage to store your authentication token. We do not use tracking cookies or third-party analytics.</p>
+        </section>
+
+        <section>
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Your Rights</h2>
+            <p>You have full control over your data. From your <a href="/settings" class="text-blue-600 hover:underline">Settings</a> page, you can:</p>
+            <ul class="list-disc list-inside mt-2 space-y-1">
+                <li><strong>Edit your profile</strong> - Update your handle, name, headline, and skills anytime</li>
+                <li><strong>Export your data</strong> - Download all your data in JSON format</li>
+                <li><strong>Delete your account</strong> - Permanently remove your account and all associated data</li>
+            </ul>
+            <p class="mt-2">No need to contact us - you can do it yourself, instantly.</p>
+        </section>
+
+        <section>
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Contact</h2>
+            <p>For privacy-related questions, contact: <a href="mailto:adrian.punga@gmail.com" class="text-blue-600 hover:underline">adrian.punga@gmail.com</a></p>
+        </section>
+    </div>
+</div>
+{% endblock %}

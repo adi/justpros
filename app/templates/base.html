@@ -9,7 +9,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@2.0.8"></script>
 </head>
-<body class="min-h-screen bg-gray-50">
+<body class="min-h-screen bg-gray-50 flex flex-col">
     <nav class="bg-white shadow-sm">
         <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <a href="/" class="flex items-center gap-2">
@@ -21,14 +21,21 @@
                 <a href="/signup" class="bg-blue-600 text-white px-4 py-1.5 rounded-md hover:bg-blue-700">Sign up</a>
             </div>
             <div id="nav-user" class="hidden flex gap-4 items-center">
-                <span id="nav-username" class="text-gray-600"></span>
+                <a href="/settings" class="text-gray-600 hover:text-gray-900">Settings</a>
                 <button onclick="logout()" class="text-gray-600 hover:text-gray-900">Log out</button>
             </div>
         </div>
     </nav>
-    <main class="max-w-4xl mx-auto px-4 py-8">
+    <main class="max-w-4xl mx-auto px-4 py-8 flex-grow">
         {% block content %}{% endblock %}
     </main>
+    <footer class="bg-white border-t mt-auto">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex flex-wrap justify-center gap-4 text-sm text-gray-600">
+            <a href="/privacy" class="hover:text-gray-900">Privacy Policy</a>
+            <a href="/terms" class="hover:text-gray-900">Terms of Service</a>
+            <a href="mailto:adrian.punga@gmail.com" class="hover:text-gray-900">Contact</a>
+        </div>
+    </footer>
     <script>
         function parseJwt(token) {
             try {

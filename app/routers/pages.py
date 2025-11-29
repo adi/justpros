@@ -24,3 +24,18 @@ async def reset_password_page(request: Request, token: str) -> HTMLResponse:
     return request.app.state.templates.TemplateResponse(
         request, "reset_password.html", {"token": token}
     )
+
+
+@router.get("/privacy", response_class=HTMLResponse)
+async def privacy_page(request: Request) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(request, "privacy.html")
+
+
+@router.get("/terms", response_class=HTMLResponse)
+async def terms_page(request: Request) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(request, "terms.html")
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(request, "settings.html")
