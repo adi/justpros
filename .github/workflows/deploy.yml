@@ -20,4 +20,5 @@ jobs:
             sudo -u justpros git fetch --tags
             sudo -u justpros git checkout ${{ github.ref_name }}
             sudo -u justpros /usr/local/bin/uv sync
+            sudo -u justpros /usr/local/bin/uv run python -m app.migrate
             systemctl restart justpros

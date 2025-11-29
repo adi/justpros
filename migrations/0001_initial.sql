@@ -1,4 +1,4 @@
--- JustPros Database Schema
+-- Initial schema: users table
 
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,

@@ -27,11 +27,11 @@ export RESEND_API_KEY="re_..."
 export BASE_URL="http://localhost:8000"
 ```
 
-### 3. Create database
+### 3. Create database and run migrations
 
 ```bash
 createdb justpros
-psql justpros -f schema.sql
+uv run python -m app.migrate
 ```
 
 ### 4. Run
