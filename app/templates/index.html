@@ -6,23 +6,10 @@
     <title>JustPros</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: system-ui, -apple-system, sans-serif;
-            background: #fafafa;
-        }
-        .logo {
-            width: 200px;
-            height: 200px;
-        }
-    </style>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.8"></script>
 </head>
-<body>
-    <img src="/static/logo.svg" alt="JustPros" class="logo">
+<body class="min-h-screen flex items-center justify-center bg-gray-50">
+    <img src="/static/logo.svg" alt="JustPros" class="w-48 h-48">
 </body>
 </html>
