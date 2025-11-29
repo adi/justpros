@@ -43,6 +43,6 @@ async def chrome_devtools():
     return {}
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def root(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "index.html")
