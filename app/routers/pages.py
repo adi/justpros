@@ -44,3 +44,10 @@ async def profile_page(request: Request) -> HTMLResponse:
 @router.api_route("/settings", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def settings_page(request: Request) -> HTMLResponse:
     return request.app.state.templates.TemplateResponse(request, "settings.html")
+
+
+@router.api_route("/u/{handle}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def public_profile_page(request: Request, handle: str) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(
+        request, "public_profile.html", {"handle": handle}
+    )

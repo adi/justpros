@@ -6,7 +6,14 @@ from pydantic import BaseModel, field_validator
 from app.auth import get_current_user, hash_password, verify_password
 from app.db import database
 from app.ratelimit import rate_limit
-from app.storage import delete_avatar, get_avatar_url, upload_avatar
+from app.storage import (
+    delete_avatar,
+    delete_cover,
+    get_avatar_url,
+    get_cover_url,
+    upload_avatar,
+    upload_cover,
+)
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -77,6 +84,7 @@ async def check_handle_availability(
 async def get_my_profile(current_user: dict = Depends(get_current_user)) -> dict:
     """Get current user profile."""
     avatar_path = current_user["avatar_path"]
+    cover_path = current_user["cover_path"]
     return {
         "id": current_user["id"],
         "handle": current_user["handle"],
@@ -86,6 +94,7 @@ async def get_my_profile(current_user: dict = Depends(get_current_user)) -> dict
         "last_name": current_user["last_name"],
         "headline": current_user["headline"],
         "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
+        "cover_url": get_cover_url(cover_path) if cover_path else None,
         "skills": current_user["skills"],
     }
 
@@ -267,3 +276,84 @@ async def change_my_password(
     )
 
     return {"message": "Password changed"}
+
+
+@router.post("/me/cover")
+async def upload_my_cover(
+    file: UploadFile,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Upload cover image."""
+    content_type = file.content_type
+    if content_type not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only JPEG, PNG, or WebP allowed",
+        )
+
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File too large (max 5MB)",
+        )
+
+    old_cover_path = current_user["cover_path"]
+    cover_path = upload_cover(current_user["id"], contents, content_type)  # type: ignore[arg-type]
+
+    # Delete old cover only after successful upload
+    if old_cover_path:
+        delete_cover(old_cover_path)
+
+    await database.execute(
+        "UPDATE users SET cover_path = :path, updated_at = NOW() WHERE id = :id",
+        {"path": cover_path, "id": current_user["id"]},
+    )
+
+    return {"cover_url": get_cover_url(cover_path)}
+
+
+@router.delete("/me/cover")
+async def delete_my_cover(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Delete cover image."""
+    if current_user["cover_path"]:
+        delete_cover(current_user["cover_path"])
+
+    await database.execute(
+        "UPDATE users SET cover_path = NULL, updated_at = NOW() WHERE id = :id",
+        {"id": current_user["id"]},
+    )
+
+    return {"message": "Cover deleted"}
+
+
+@router.get("/u/{handle}")
+async def get_public_profile(handle: str) -> dict:
+    """Get public profile by handle."""
+    user = await database.fetch_one(
+        """
+        SELECT handle, first_name, middle_name, last_name, headline, avatar_path, cover_path, skills
+        FROM users WHERE handle = :handle
+        """,
+        {"handle": handle.lower()},
+    )
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    avatar_path = user["avatar_path"]
+    cover_path = user["cover_path"]
+    first_name = user["first_name"] or ""
+    middle_name = user["middle_name"]
+    last_name = user["last_name"] or ""
+    full_name = f"{first_name} {middle_name} {last_name}".replace("  ", " ").strip() if middle_name else f"{first_name} {last_name}".strip()
+
+    return {
+        "handle": user["handle"],
+        "name": full_name,
+        "headline": user["headline"],
+        "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
+        "cover_url": get_cover_url(cover_path) if cover_path else None,
+        "skills": user["skills"],
+    }

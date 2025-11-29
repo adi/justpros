@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} - JustPros{% endblock %}
+{% block og_title %}{{ name }} - JustPros{% endblock %}
+{% block og_description %}{{ headline or "Professional on JustPros" }}{% endblock %}
+{% block og_url %}/u/{{ handle }}{% endblock %}
+{% block twitter_title %}{{ name }} - JustPros{% endblock %}
+{% block twitter_description %}{{ headline or "Professional on JustPros" }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto -mt-8">
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <!-- Cover Image -->
+        <div id="cover-image" class="h-48 bg-gray-300 bg-cover bg-center"></div>
+
+        <!-- Profile Header -->
+        <div class="relative px-6 pb-6">
+            <!-- Avatar overlapping cover -->
+            <div class="absolute -top-16 left-6">
+                <img id="avatar-image" src="/static/default-avatar.svg" alt="Avatar"
+                    class="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg bg-white">
+            </div>
+
+            <!-- Profile Info -->
+            <div class="pt-20">
+                <h1 id="profile-name" class="text-2xl font-bold text-gray-900"></h1>
+                <p id="profile-headline" class="text-gray-600 mt-1"></p>
+
+                <!-- Skills -->
+                <div id="profile-skills" class="flex flex-wrap gap-2 mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Future: Posts will go here -->
+</div>
+
+<script>
+    const handle = '{{ handle }}';
+
+    async function loadPublicProfile() {
+        try {
+            const response = await fetch(`/api/u/${encodeURIComponent(handle)}`);
+
+            if (response.status === 404) {
+                document.querySelector('.max-w-2xl').innerHTML = `
+                    <div class="bg-white rounded-lg shadow p-8 text-center">
+                        <h1 class="text-2xl font-bold text-gray-900 mb-2">User not found</h1>
+                        <p class="text-gray-600">The profile you're looking for doesn't exist.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const data = await response.json();
+
+            document.getElementById('profile-name').textContent = data.name || handle;
+            document.getElementById('profile-headline').textContent = data.headline || '';
+
+            if (data.avatar_url) {
+                document.getElementById('avatar-image').src = data.avatar_url;
+            }
+
+            if (data.cover_url) {
+                document.getElementById('cover-image').style.backgroundImage = `url(${data.cover_url})`;
+            }
+
+            const skillsContainer = document.getElementById('profile-skills');
+            if (data.skills && data.skills.length > 0) {
+                skillsContainer.innerHTML = data.skills.map(skill =>
+                    `<span class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">${skill}</span>`
+                ).join('');
+            }
+
+            // Update page title
+            if (data.name) {
+                document.title = `${data.name} - JustPros`;
+            }
+        } catch (error) {
+            console.error('Failed to load profile:', error);
+        }
+    }
+
+    loadPublicProfile();
+</script>
+{% endblock %}

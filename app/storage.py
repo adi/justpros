@@ -57,3 +57,29 @@ def delete_avatar(avatar_path: str) -> None:
 def get_avatar_url(avatar_path: str) -> str:
     """Get full URL for avatar path."""
     return f"{R2_PUBLIC_URL}/{avatar_path}"
+
+
+def upload_cover(user_id: int, file_data: bytes, content_type: str) -> str:
+    """Upload cover image and return path."""
+    ext = EXTENSION_MAP.get(content_type)
+    if ext is None:
+        raise ValueError(f"Unsupported content type: {content_type}")
+    hashed_id = _hash_user_id(user_id)
+    path = f"covers/{hashed_id}.{ext}"
+    s3.put_object(
+        Bucket=R2_BUCKET_NAME,
+        Key=path,
+        Body=file_data,
+        ContentType=content_type,
+    )
+    return path
+
+
+def delete_cover(cover_path: str) -> None:
+    """Delete cover image from storage."""
+    s3.delete_object(Bucket=R2_BUCKET_NAME, Key=cover_path)
+
+
+def get_cover_url(cover_path: str) -> str:
+    """Get full URL for cover path."""
+    return f"{R2_PUBLIC_URL}/{cover_path}"

@@ -61,7 +61,7 @@ async def get_current_user(
             detail="Invalid or expired token",
         )
     user = await database.fetch_one(
-        "SELECT id, handle, email, first_name, middle_name, last_name, headline, avatar_path, skills FROM users WHERE id = :id",
+        "SELECT id, handle, email, first_name, middle_name, last_name, headline, avatar_path, cover_path, skills FROM users WHERE id = :id",
         {"id": user_id},
     )
     if user is None:
