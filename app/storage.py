@@ -1,3 +1,4 @@
+import hashlib
 import os
 
 import boto3
@@ -25,12 +26,20 @@ EXTENSION_MAP = {
 }
 
 
+def _hash_user_id(user_id: int) -> str:
+    """Create a non-guessable hash from user ID."""
+    secret = R2_SECRET_ACCESS_KEY.encode()
+    data = str(user_id).encode()
+    return hashlib.blake2b(data, key=secret, digest_size=16).hexdigest()
+
+
 def upload_avatar(user_id: int, file_data: bytes, content_type: str) -> str:
     """Upload avatar and return path."""
     ext = EXTENSION_MAP.get(content_type)
     if ext is None:
         raise ValueError(f"Unsupported content type: {content_type}")
-    path = f"avatars/{user_id}.{ext}"
+    hashed_id = _hash_user_id(user_id)
+    path = f"avatars/{hashed_id}.{ext}"
     s3.put_object(
         Bucket=R2_BUCKET_NAME,
         Key=path,
