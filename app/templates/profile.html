@@ -250,6 +250,9 @@
         } catch (error) {
             messageEl.innerHTML = '<p class="text-red-600">Failed to upload. Please try again.</p>';
         }
+
+        // Reset input so same file can be selected again
+        e.target.value = '';
     });
 
     document.getElementById('profile-form').addEventListener('submit', async (e) => {
