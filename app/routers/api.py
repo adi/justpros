@@ -1,11 +1,12 @@
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, field_validator
 
 from app.auth import get_current_user
 from app.db import database
 from app.ratelimit import rate_limit
+from app.storage import delete_avatar, get_avatar_url, upload_avatar
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -63,6 +64,7 @@ async def check_handle_availability(
 @router.get("/me")
 async def get_my_profile(current_user: dict = Depends(get_current_user)) -> dict:
     """Get current user profile."""
+    avatar_path = current_user["avatar_path"]
     return {
         "id": current_user["id"],
         "handle": current_user["handle"],
@@ -71,7 +73,7 @@ async def get_my_profile(current_user: dict = Depends(get_current_user)) -> dict
         "middle_name": current_user["middle_name"],
         "last_name": current_user["last_name"],
         "headline": current_user["headline"],
-        "avatar_url": current_user["avatar_url"],
+        "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
         "skills": current_user["skills"],
     }
 
@@ -127,7 +129,7 @@ async def export_my_data(current_user: dict = Depends(get_current_user)) -> dict
     # Get full user profile
     user = await database.fetch_one(
         """
-        SELECT handle, email, first_name, middle_name, last_name, headline, avatar_url, skills, created_at
+        SELECT handle, email, first_name, middle_name, last_name, headline, avatar_path, skills, created_at
         FROM users WHERE id = :id
         """,
         {"id": user_id},
@@ -139,6 +141,7 @@ async def export_my_data(current_user: dict = Depends(get_current_user)) -> dict
     #     {"id": user_id},
     # )
 
+    avatar_path = user["avatar_path"]
     return {
         "profile": {
             "handle": user["handle"],
@@ -147,7 +150,7 @@ async def export_my_data(current_user: dict = Depends(get_current_user)) -> dict
             "middle_name": user["middle_name"],
             "last_name": user["last_name"],
             "headline": user["headline"],
-            "avatar_url": user["avatar_url"],
+            "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
             "skills": user["skills"],
             "created_at": user["created_at"].isoformat() if user["created_at"] else None,
         },
@@ -166,3 +169,48 @@ async def delete_my_account(current_user: dict = Depends(get_current_user)) -> d
     await database.execute("DELETE FROM users WHERE id = :id", {"id": user_id})
 
     return {"message": "Account deleted"}
+
+
+@router.post("/me/avatar")
+async def upload_my_avatar(
+    file: UploadFile,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Upload avatar image."""
+    if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only JPEG, PNG, or WebP allowed",
+        )
+
+    contents = await file.read()
+    if len(contents) > 2 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File too large (max 2MB)",
+        )
+
+    avatar_path = upload_avatar(current_user["id"], contents, file.content_type)
+
+    await database.execute(
+        "UPDATE users SET avatar_path = :path, updated_at = NOW() WHERE id = :id",
+        {"path": avatar_path, "id": current_user["id"]},
+    )
+
+    return {"avatar_url": get_avatar_url(avatar_path)}
+
+
+@router.delete("/me/avatar")
+async def delete_my_avatar(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Delete avatar image."""
+    if current_user["avatar_path"]:
+        delete_avatar(current_user["avatar_path"])
+
+    await database.execute(
+        "UPDATE users SET avatar_path = NULL, updated_at = NOW() WHERE id = :id",
+        {"id": current_user["id"]},
+    )
+
+    return {"message": "Avatar deleted"}

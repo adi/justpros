@@ -6,6 +6,30 @@
 
     <div class="space-y-8">
         <section class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Profile Photo</h2>
+            <div class="flex items-center gap-6">
+                <div class="relative">
+                    <img id="avatar-preview" src="/static/default-avatar.svg" alt="Avatar"
+                        class="w-24 h-24 rounded-full object-cover border-2 border-gray-200">
+                </div>
+                <div>
+                    <input type="file" id="avatar-input" accept="image/jpeg,image/png,image/webp" class="hidden">
+                    <div class="flex gap-2">
+                        <button type="button" id="avatar-button" onclick="document.getElementById('avatar-input').click()"
+                            class="bg-brand-blue text-white px-4 py-2 rounded-md hover:opacity-90">
+                            Add Photo
+                        </button>
+                        <button type="button" id="avatar-delete" onclick="deleteAvatar()" class="hidden px-4 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50">
+                            Delete
+                        </button>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-2">JPEG, PNG or WebP. Max 2MB.</p>
+                    <div id="avatar-message" class="mt-2"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-white rounded-lg shadow p-6">
             <h2 class="text-xl font-semibold text-gray-900 mb-4">Edit Account</h2>
             <form id="account-form" class="space-y-4">
                 <div>
@@ -152,10 +176,100 @@
             document.getElementById('first_name').value = data.first_name || '';
             document.getElementById('middle_name').value = data.middle_name || '';
             document.getElementById('last_name').value = data.last_name || '';
+            if (data.avatar_url) {
+                document.getElementById('avatar-preview').src = data.avatar_url;
+                document.getElementById('avatar-button').textContent = 'Change Photo';
+                document.getElementById('avatar-delete').classList.remove('hidden');
+            }
         } catch (error) {
             console.error('Failed to load account:', error);
         }
     }
+
+    async function deleteAvatar() {
+        if (!confirm('Delete your profile photo?')) return;
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        const messageEl = document.getElementById('avatar-message');
+
+        try {
+            const response = await fetch('/api/me/avatar', {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+                return;
+            }
+
+            if (response.ok) {
+                document.getElementById('avatar-preview').src = '/static/default-avatar.svg';
+                document.getElementById('avatar-button').textContent = 'Add Photo';
+                document.getElementById('avatar-delete').classList.add('hidden');
+                messageEl.innerHTML = '<p class="text-green-600">Photo deleted</p>';
+            } else {
+                messageEl.innerHTML = '<p class="text-red-600">Failed to delete photo</p>';
+            }
+        } catch (error) {
+            messageEl.innerHTML = '<p class="text-red-600">Failed to delete photo</p>';
+        }
+    }
+
+    document.getElementById('avatar-input').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.size > 2 * 1024 * 1024) {
+            document.getElementById('avatar-message').innerHTML = '<p class="text-red-600">File too large (max 2MB)</p>';
+            return;
+        }
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        const messageEl = document.getElementById('avatar-message');
+        messageEl.innerHTML = '<p class="text-gray-500">Uploading...</p>';
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch('/api/me/avatar', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+                return;
+            }
+
+            if (response.ok) {
+                const data = await response.json();
+                document.getElementById('avatar-preview').src = data.avatar_url;
+                document.getElementById('avatar-button').textContent = 'Change Photo';
+                document.getElementById('avatar-delete').classList.remove('hidden');
+                messageEl.innerHTML = '<p class="text-green-600">Photo updated!</p>';
+            } else {
+                const data = await response.json();
+                messageEl.innerHTML = `<p class="text-red-600">${data.detail || 'Failed to upload'}</p>`;
+            }
+        } catch (error) {
+            messageEl.innerHTML = '<p class="text-red-600">Failed to upload. Please try again.</p>';
+        }
+    });
 
     document.getElementById('account-form').addEventListener('submit', async (e) => {
         e.preventDefault();
