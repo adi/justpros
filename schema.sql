@@ -9,6 +9,11 @@ CREATE TABLE IF NOT EXISTS users (
     headline VARCHAR(200),
     avatar_url VARCHAR(500),
     skills TEXT[] DEFAULT '{}',
+    verified BOOLEAN DEFAULT FALSE,
+    verification_token VARCHAR(64),
+    verification_token_expires TIMESTAMPTZ,
+    reset_token VARCHAR(64),
+    reset_token_expires TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
