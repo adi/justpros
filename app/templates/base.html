@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}JustPros{% endblock %}</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.8"></script>
+</head>
+<body class="min-h-screen bg-gray-50">
+    <nav class="bg-white shadow-sm">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2">
+                <img src="/static/logo.svg" alt="JustPros" class="w-8 h-8">
+                <span class="font-semibold text-gray-900">JustPros</span>
+            </a>
+            <div id="nav-guest" class="flex gap-4 items-center">
+                <a href="/login" class="text-gray-600 hover:text-gray-900">Log in</a>
+                <a href="/signup" class="bg-blue-600 text-white px-4 py-1.5 rounded-md hover:bg-blue-700">Sign up</a>
+            </div>
+            <div id="nav-user" class="hidden flex gap-4 items-center">
+                <span id="nav-username" class="text-gray-600"></span>
+                <button onclick="logout()" class="text-gray-600 hover:text-gray-900">Log out</button>
+            </div>
+        </div>
+    </nav>
+    <main class="max-w-4xl mx-auto px-4 py-8">
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+        function parseJwt(token) {
+            try {
+                const base64Url = token.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                return JSON.parse(window.atob(base64));
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            if (token) {
+                const payload = parseJwt(token);
+                if (payload && payload.exp * 1000 > Date.now()) {
+                    document.getElementById('nav-guest').classList.add('hidden');
+                    document.getElementById('nav-user').classList.remove('hidden');
+                    return true;
+                } else {
+                    localStorage.removeItem('token');
+                }
+            }
+            document.getElementById('nav-guest').classList.remove('hidden');
+            document.getElementById('nav-user').classList.add('hidden');
+            return false;
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = '/';
+        }
+
+        checkAuth();
+    </script>
+</body>
+</html>
