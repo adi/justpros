@@ -23,8 +23,15 @@
 
             <!-- Profile Info -->
             <div class="pt-20">
-                <h1 id="profile-name" class="text-2xl font-bold text-gray-900"></h1>
-                <p id="profile-headline" class="text-gray-600 mt-1"></p>
+                <div class="flex items-start justify-between gap-4">
+                    <div class="flex-1 min-w-0">
+                        <h1 id="profile-name" class="text-2xl font-bold text-gray-900"></h1>
+                        <p id="profile-headline" class="text-gray-600 mt-1"></p>
+                    </div>
+                    <button id="connect-btn" class="hidden bg-brand-blue text-white px-4 py-2 rounded-md hover:opacity-90 text-sm font-medium flex-shrink-0">
+                        Connect
+                    </button>
+                </div>
 
                 <!-- Skills -->
                 <div id="profile-skills" class="flex flex-wrap gap-2 mt-4"></div>
@@ -76,8 +83,37 @@
             if (data.name) {
                 document.title = `${data.name} - JustPros`;
             }
+
+            // Show Connect button if logged in and not viewing own profile
+            await showConnectButton();
         } catch (error) {
             console.error('Failed to load profile:', error);
+        }
+    }
+
+    async function showConnectButton() {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        // Check if token is valid
+        const payload = parseJwt(token);
+        if (!payload || payload.exp * 1000 <= Date.now()) return;
+
+        // Get current user's handle to check if viewing own profile
+        try {
+            const response = await fetch('/api/me', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) return;
+
+            const me = await response.json();
+            // Don't show Connect button on own profile
+            if (me.handle === handle) return;
+
+            // Show the Connect button
+            document.getElementById('connect-btn').classList.remove('hidden');
+        } catch (e) {
+            console.error('Failed to check current user:', e);
         }
     }
 
