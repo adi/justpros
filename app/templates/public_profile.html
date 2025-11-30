@@ -8,6 +8,26 @@
 {% block twitter_description %}{{ headline or "Professional on JustPros" }}{% endblock %}
 {% if og_image %}{% block twitter_image %}{{ og_image }}{% endblock %}{% endif %}
 {% block content %}
+<style>
+    #body-editor .tiptap {
+        min-height: 80px;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #d1d5db;
+        border-radius: 0.375rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+    }
+    #body-editor .tiptap:focus {
+        outline: none;
+        border-color: #1a79e5;
+        box-shadow: 0 0 0 2px rgba(26, 121, 229, 0.1);
+    }
+    #body-editor .tiptap p { margin: 0; }
+    #body-editor .tiptap p + p { margin-top: 0.5rem; }
+    .editor-toolbar button.is-active {
+        background-color: #e5e7eb;
+    }
+</style>
 <div class="mt-2 w-full">
     <div class="bg-white rounded-lg shadow overflow-hidden">
         <!-- Cover Image -->
@@ -73,23 +93,33 @@
             </div>
         </div>
 
-        <p class="text-sm text-gray-600 mb-3">How do you know this person?</p>
-
-        <!-- Preset buttons -->
-        <div class="flex flex-wrap gap-2 mb-4">
-            <button onclick="selectPreset('Worked together')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Worked together</button>
-            <button onclick="selectPreset('Was my manager')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Was my manager</button>
-            <button onclick="selectPreset('Was my report')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Was my report</button>
-            <button onclick="selectPreset('Collaborated on a project')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Collaborated on a project</button>
-            <button onclick="selectPreset('Met at an event')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Met at an event</button>
-            <button onclick="selectPreset('Classmates')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Classmates</button>
+        <!-- Subject field -->
+        <div class="mb-3">
+            <label class="block text-sm text-gray-600 mb-1">How do you know this person?</label>
+            <!-- Preset buttons for subject -->
+            <div class="flex flex-wrap gap-2 mb-2">
+                <button onclick="selectPreset('Worked together')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Worked together</button>
+                <button onclick="selectPreset('Was my manager')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Was my manager</button>
+                <button onclick="selectPreset('Was my report')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Was my report</button>
+                <button onclick="selectPreset('Collaborated on a project')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Collaborated on a project</button>
+                <button onclick="selectPreset('Met at an event')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Met at an event</button>
+                <button onclick="selectPreset('Classmates')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Classmates</button>
+            </div>
+            <input type="text" id="subject-input" placeholder="Or type your own..." maxlength="100"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue text-sm">
+            <p class="text-xs text-gray-500 mt-1"><span id="subject-length">0</span>/100</p>
         </div>
 
-        <!-- Custom claim input -->
+        <!-- Body field with Tiptap editor (optional) -->
         <div class="mb-3">
-            <textarea id="claim-input" placeholder="Describe your connection..." maxlength="200" rows="3"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none text-sm"></textarea>
-            <p class="text-xs text-gray-500 mt-1"><span id="claim-length">0</span>/200</p>
+            <label class="block text-sm text-gray-600 mb-1">Add details (optional)</label>
+            <!-- Minimal toolbar -->
+            <div id="editor-toolbar" class="editor-toolbar flex gap-1 mb-2 text-gray-500 text-sm">
+                <button type="button" id="btn-bold" class="p-1.5 hover:bg-gray-100 rounded font-bold" title="Bold (Ctrl+B)">B</button>
+                <button type="button" id="btn-italic" class="p-1.5 hover:bg-gray-100 rounded italic" title="Italic (Ctrl+I)">I</button>
+            </div>
+            <div id="body-editor"></div>
+            <p class="text-xs text-gray-500 mt-1"><span id="body-length">0</span>/2000</p>
         </div>
 
         <div id="compose-error" class="hidden text-red-600 text-sm mb-3"></div>
@@ -127,7 +157,8 @@
                 </button>
             </div>
             <p class="text-gray-600 mb-2"><span id="respond-name" class="font-medium"></span> wants to connect:</p>
-            <p id="respond-claim" class="text-gray-900 bg-gray-100 p-3 rounded-md mb-4 italic"></p>
+            <p id="respond-subject" class="text-gray-900 font-medium mb-2"></p>
+            <div id="respond-body" class="text-gray-700 bg-gray-100 p-3 rounded-md mb-4 text-sm hidden"></div>
 
             <div id="respond-error" class="hidden text-red-600 text-sm mb-4"></div>
 
@@ -139,11 +170,72 @@
     </div>
 </div>
 
-<script>
+<script type="module">
+    import { Editor } from 'https://esm.sh/@tiptap/core@2.11.5';
+    import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.11.5';
+
     const handle = '{{ handle }}';
     let profileName = '';
-    let statusData = null;  // New: stores full status response
+    let statusData = null;  // stores full status response
     let currentPendingClaim = null;  // Currently selected pending claim for respond modal
+    let bodyEditor = null;  // Tiptap editor instance for body
+
+    // Initialize Tiptap editor for body
+    function initEditor() {
+        bodyEditor = new Editor({
+            element: document.querySelector('#body-editor'),
+            extensions: [StarterKit],
+            content: '',
+            editorProps: {
+                attributes: {
+                    class: 'tiptap prose prose-sm max-w-none focus:outline-none',
+                },
+            },
+            onUpdate: ({ editor }) => {
+                const len = editor.getText().trim().length;
+                document.getElementById('body-length').textContent = len;
+                updateSubmitButtonState();
+                updateToolbarState();
+            },
+            onSelectionUpdate: () => {
+                updateToolbarState();
+            },
+        });
+
+        // Toolbar button handlers
+        document.getElementById('btn-bold').addEventListener('click', () => {
+            bodyEditor.chain().focus().toggleBold().run();
+        });
+        document.getElementById('btn-italic').addEventListener('click', () => {
+            bodyEditor.chain().focus().toggleItalic().run();
+        });
+
+        // Subject input event listener
+        document.getElementById('subject-input').addEventListener('input', (e) => {
+            const len = e.target.value.length;
+            document.getElementById('subject-length').textContent = len;
+            updateSubmitButtonState();
+
+            // Clear preset highlights when typing custom
+            document.querySelectorAll('.preset-btn').forEach(b => {
+                if (b.textContent !== e.target.value) {
+                    b.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue');
+                }
+            });
+        });
+    }
+
+    function updateSubmitButtonState() {
+        const subjectLen = document.getElementById('subject-input').value.trim().length;
+        const bodyLen = bodyEditor ? bodyEditor.getText().trim().length : 0;
+        document.getElementById('submit-connect-btn').disabled = subjectLen < 3 || subjectLen > 100 || bodyLen > 2000;
+    }
+
+    function updateToolbarState() {
+        if (!bodyEditor) return;
+        document.getElementById('btn-bold').classList.toggle('is-active', bodyEditor.isActive('bold'));
+        document.getElementById('btn-italic').classList.toggle('is-active', bodyEditor.isActive('italic'));
+    }
 
     async function loadPublicProfile() {
         try {
@@ -227,7 +319,7 @@
                     <div class="ml-13 mt-2 space-y-2">
                         ${conn.claims.map(c => `
                             <div class="flex items-center gap-2 text-sm">
-                                <span class="text-gray-500 italic truncate flex-1">"${c.claim}"</span>
+                                <span class="text-gray-500 italic truncate flex-1">"${c.subject}"</span>
                                 <div class="flex gap-1 flex-shrink-0" data-claim-id="${c.id}">
                                     <button onclick="voteClaim(${c.id}, 1)" class="vote-btn vote-up p-1 rounded hover:bg-green-100 text-gray-400 hover:text-green-600" title="Confirm this claim">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
@@ -354,14 +446,18 @@
         document.getElementById('minimized-name').textContent = profileName;
         document.getElementById('compose-handle').textContent = profileName;
         document.getElementById('compose-avatar').src = document.getElementById('avatar-image').src;
-        document.getElementById('claim-input').value = '';
-        document.getElementById('claim-length').textContent = '0';
+        document.getElementById('subject-input').value = '';
+        document.getElementById('subject-length').textContent = '0';
+        if (bodyEditor) {
+            bodyEditor.commands.clearContent();
+        }
+        document.getElementById('body-length').textContent = '0';
         document.getElementById('compose-error').classList.add('hidden');
         document.getElementById('submit-connect-btn').disabled = true;
         document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue'));
         document.getElementById('compose-overlay').classList.remove('hidden');
         document.getElementById('compose-minimized').classList.add('hidden');
-        document.getElementById('claim-input').focus();
+        document.getElementById('subject-input').focus();
     }
 
     function closeCompose() {
@@ -380,9 +476,9 @@
     }
 
     function selectPreset(text) {
-        document.getElementById('claim-input').value = text;
-        document.getElementById('claim-length').textContent = text.length;
-        document.getElementById('submit-connect-btn').disabled = text.length < 3;
+        document.getElementById('subject-input').value = text;
+        document.getElementById('subject-length').textContent = text.length;
+        updateSubmitButtonState();
 
         // Highlight selected preset
         document.querySelectorAll('.preset-btn').forEach(b => {
@@ -393,29 +489,20 @@
             }
         });
     }
-
-    // Claim input event listener
-    document.getElementById('claim-input').addEventListener('input', (e) => {
-        const len = e.target.value.length;
-        document.getElementById('claim-length').textContent = len;
-        document.getElementById('submit-connect-btn').disabled = len < 3;
-
-        // Clear preset highlights when typing custom
-        document.querySelectorAll('.preset-btn').forEach(b => {
-            if (b.textContent !== e.target.value) {
-                b.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue');
-            }
-        });
-    });
+    // Expose selectPreset globally for onclick handlers
+    window.selectPreset = selectPreset;
 
     async function submitConnection() {
         const token = localStorage.getItem('token');
-        const claim = document.getElementById('claim-input').value.trim();
+        const subject = document.getElementById('subject-input').value.trim();
+        // Use getHTML() to preserve rich text formatting, but check if there's actual content
+        const bodyText = bodyEditor ? bodyEditor.getText().trim() : '';
+        const bodyHtml = bodyEditor && bodyText ? bodyEditor.getHTML() : null;
         const errorEl = document.getElementById('compose-error');
         const submitBtn = document.getElementById('submit-connect-btn');
 
-        if (claim.length < 3) {
-            errorEl.textContent = 'Claim must be at least 3 characters';
+        if (subject.length < 3) {
+            errorEl.textContent = 'Subject must be at least 3 characters';
             errorEl.classList.remove('hidden');
             return;
         }
@@ -430,7 +517,7 @@
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ to_handle: handle, claim })
+                body: JSON.stringify({ to_handle: handle, subject, body: bodyHtml })
             });
 
             if (!response.ok) {
@@ -458,7 +545,14 @@
         // Show the first pending claim (user can confirm/ignore each one)
         currentPendingClaim = statusData.pending_received[0];
         document.getElementById('respond-name').textContent = profileName;
-        document.getElementById('respond-claim').textContent = `"${currentPendingClaim.claim}"`;
+        document.getElementById('respond-subject').textContent = currentPendingClaim.subject;
+        const bodyEl = document.getElementById('respond-body');
+        if (currentPendingClaim.body) {
+            bodyEl.innerHTML = currentPendingClaim.body;
+            bodyEl.classList.remove('hidden');
+        } else {
+            bodyEl.classList.add('hidden');
+        }
         document.getElementById('respond-error').classList.add('hidden');
         document.getElementById('respond-modal').classList.remove('hidden');
     }
@@ -535,6 +629,19 @@
         if (e.target === e.currentTarget) closeRespondModal();
     });
 
+    // Expose functions to global scope for onclick handlers
+    window.minimizeCompose = minimizeCompose;
+    window.closeCompose = closeCompose;
+    window.restoreCompose = restoreCompose;
+    window.submitConnection = submitConnection;
+    window.openRespondModal = openRespondModal;
+    window.closeRespondModal = closeRespondModal;
+    window.confirmConnection = confirmConnection;
+    window.ignoreConnection = ignoreConnection;
+    window.voteClaim = voteClaim;
+
+    // Initialize editor and load profile
+    initEditor();
     loadPublicProfile();
 </script>
 {% endblock %}

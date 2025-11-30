@@ -15,15 +15,26 @@ router = APIRouter(prefix="/api/connections", tags=["connections"])
 
 class ConnectionCreate(BaseModel):
     to_handle: str
-    claim: str
+    subject: str
+    body: str | None = None
 
-    @field_validator("claim")
+    @field_validator("subject")
     @classmethod
-    def validate_claim(cls, v: str) -> str:
+    def validate_subject(cls, v: str) -> str:
         v = v.strip()
-        if len(v) < 3 or len(v) > 200:
-            raise ValueError("Claim must be 3-200 characters")
+        if len(v) < 3 or len(v) > 100:
+            raise ValueError("Subject must be 3-100 characters")
         return v
+
+    @field_validator("body")
+    @classmethod
+    def validate_body(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if len(v) > 2000:
+            raise ValueError("Body must be at most 2000 characters")
+        return v if v else None
 
 
 class ConnectionVote(BaseModel):
@@ -175,11 +186,16 @@ async def create_connection(
     # Create the connection
     result = await database.fetch_one(
         """
-        INSERT INTO connections (from_user_id, to_user_id, claim)
-        VALUES (:from_id, :to_id, :claim)
+        INSERT INTO connections (from_user_id, to_user_id, subject, body)
+        VALUES (:from_id, :to_id, :subject, :body)
         RETURNING id
         """,
-        {"from_id": from_user_id, "to_id": to_user_id, "claim": payload.claim},
+        {
+            "from_id": from_user_id,
+            "to_id": to_user_id,
+            "subject": payload.subject,
+            "body": payload.body,
+        },
     )
 
     return {"id": result["id"], "message": "Connection request sent"}
@@ -198,7 +214,8 @@ async def list_my_connections(
             c.id,
             c.from_user_id,
             c.to_user_id,
-            c.claim,
+            c.subject,
+            c.body,
             c.created_at,
             u_from.handle as from_handle,
             u_from.first_name as from_first_name,
@@ -261,7 +278,8 @@ async def list_my_connections(
             "name": _format_user_name(other),
             "headline": other["headline"],
             "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
-            "claim": conn["claim"],
+            "subject": conn["subject"],
+            "body": conn["body"],
             "created_at": conn["created_at"].isoformat() if conn["created_at"] else None,
         })
 
@@ -291,7 +309,8 @@ async def list_pending_connections(
         """
         SELECT
             c.id,
-            c.claim,
+            c.subject,
+            c.body,
             c.created_at,
             u.handle,
             u.first_name,
@@ -317,7 +336,8 @@ async def list_pending_connections(
             "name": _format_user_name(dict(conn)),
             "headline": conn["headline"],
             "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
-            "claim": conn["claim"],
+            "subject": conn["subject"],
+            "body": conn["body"],
             "created_at": conn["created_at"].isoformat() if conn["created_at"] else None,
         })
 
@@ -335,7 +355,8 @@ async def list_ignored_connections(
         """
         SELECT
             c.id,
-            c.claim,
+            c.subject,
+            c.body,
             c.created_at,
             c.ignored_at,
             u.handle,
@@ -362,7 +383,8 @@ async def list_ignored_connections(
             "name": _format_user_name(dict(conn)),
             "headline": conn["headline"],
             "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
-            "claim": conn["claim"],
+            "subject": conn["subject"],
+            "body": conn["body"],
             "created_at": conn["created_at"].isoformat() if conn["created_at"] else None,
             "ignored_at": conn["ignored_at"].isoformat() if conn["ignored_at"] else None,
         })
@@ -381,7 +403,8 @@ async def list_confirmed_received_connections(
         """
         SELECT
             c.id,
-            c.claim,
+            c.subject,
+            c.body,
             c.created_at,
             c.confirmed_at,
             u.handle,
@@ -408,7 +431,8 @@ async def list_confirmed_received_connections(
             "name": _format_user_name(dict(conn)),
             "headline": conn["headline"],
             "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
-            "claim": conn["claim"],
+            "subject": conn["subject"],
+            "body": conn["body"],
             "created_at": conn["created_at"].isoformat() if conn["created_at"] else None,
             "confirmed_at": conn["confirmed_at"].isoformat() if conn["confirmed_at"] else None,
         })
@@ -427,7 +451,8 @@ async def list_sent_connections(
         """
         SELECT
             c.id,
-            c.claim,
+            c.subject,
+            c.body,
             c.status,
             c.created_at,
             u.handle,
@@ -453,7 +478,8 @@ async def list_sent_connections(
             "name": _format_user_name(dict(conn)),
             "headline": conn["headline"],
             "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
-            "claim": conn["claim"],
+            "subject": conn["subject"],
+            "body": conn["body"],
             "status": conn["status"],
             "created_at": conn["created_at"].isoformat() if conn["created_at"] else None,
         })
@@ -616,7 +642,8 @@ async def get_user_connections(handle: str) -> list[dict]:
             c.id,
             c.from_user_id,
             c.to_user_id,
-            c.claim,
+            c.subject,
+            c.body,
             c.created_at,
             u_from.handle as from_handle,
             u_from.first_name as from_first_name,
@@ -692,7 +719,8 @@ async def get_user_connections(handle: str) -> list[dict]:
         # Add this claim
         grouped[other_handle]["claims"].append({
             "id": conn["id"],
-            "claim": conn["claim"],
+            "subject": conn["subject"],
+            "body": conn["body"],
             "from_me": from_me,
             "created_at": conn["created_at"].isoformat() if conn["created_at"] else None,
         })
@@ -926,7 +954,7 @@ async def get_connection_status(
     # Get all claims between these users (both directions)
     all_claims = await database.fetch_all(
         """
-        SELECT id, from_user_id, to_user_id, claim, status, created_at
+        SELECT id, from_user_id, to_user_id, subject, body, status, created_at
         FROM connections
         WHERE (from_user_id = :user_id AND to_user_id = :target_id)
            OR (from_user_id = :target_id AND to_user_id = :user_id)
@@ -947,7 +975,8 @@ async def get_connection_status(
     pending_received = [
         {
             "id": c["id"],
-            "claim": c["claim"],
+            "subject": c["subject"],
+            "body": c["body"],
             "created_at": c["created_at"].isoformat() if c["created_at"] else None,
         }
         for c in all_claims
