@@ -361,22 +361,22 @@
 
     function renderMessage(msg, otherUser) {
         if (msg.kind === 'claim') {
-            // Claim message - special card style
+            // Claim message - pastel card style
             const isPending = !conversationState.is_connected && !msg.is_mine;
             const showButtons = isPending && conversationState.pending_claim_from_them;
 
             return `
                 <div class="flex ${msg.is_mine ? 'justify-end' : 'justify-start'}">
-                    <div class="max-w-[85%] bg-gradient-to-br ${msg.is_mine ? 'from-blue-50 to-blue-100 border-blue-200' : 'from-pink-50 to-pink-100 border-pink-200'} border rounded-lg p-4">
+                    <div class="max-w-[85%] ${msg.is_mine ? 'bg-blue-100' : 'bg-pink-100'} rounded-2xl p-4">
                         <div class="flex items-center gap-2 mb-2">
-                            <svg class="w-4 h-4 ${msg.is_mine ? 'text-blue-500' : 'text-pink-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-4 h-4 ${msg.is_mine ? 'text-blue-600' : 'text-pink-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
                             </svg>
                             <span class="text-sm font-medium ${msg.is_mine ? 'text-blue-700' : 'text-pink-700'}">Claim</span>
                         </div>
-                        <p class="text-gray-700 whitespace-pre-wrap">${escapeHtml(msg.content)}</p>
+                        <p class="whitespace-pre-wrap ${msg.is_mine ? 'text-blue-900' : 'text-pink-900'}">${escapeHtml(msg.content)}</p>
                         ${showButtons ? `
-                            <div class="flex gap-2 mt-3 pt-3 border-t ${msg.is_mine ? 'border-blue-200' : 'border-pink-200'}">
+                            <div class="flex gap-2 mt-3 pt-3 border-t border-pink-200">
                                 <button onclick="ignoreClaimFromChat()" class="flex-1 px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-white">
                                     Ignore
                                 </button>
@@ -385,22 +385,26 @@
                                 </button>
                             </div>
                         ` : ''}
-                        <p class="text-xs text-gray-500 mt-2">${formatTime(msg.created_at)}</p>
+                        <p class="text-xs ${msg.is_mine ? 'text-blue-500' : 'text-pink-500'} mt-2">${formatTime(msg.created_at)}</p>
                     </div>
                 </div>
             `;
         } else if (msg.kind === 'confirm') {
-            // Confirm message - bubble style like regular messages
+            // Confirm message - pastel green card style
+            const confirmText = msg.is_mine
+                ? `You are now connected with ${otherUser.name || otherUser.handle}`
+                : `${otherUser.name || otherUser.handle} confirmed your connection`;
             return `
                 <div class="flex ${msg.is_mine ? 'justify-end' : 'justify-start'}">
-                    <div class="max-w-[75%] px-4 py-2 rounded-2xl bg-green-100 text-green-800">
-                        <div class="flex items-center gap-1">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="max-w-[85%] bg-green-100 rounded-2xl p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                             </svg>
-                            <span>Claim confirmed</span>
+                            <span class="text-sm font-medium text-green-700">Claim confirmed</span>
                         </div>
-                        <p class="text-xs text-green-600 mt-1">${formatTime(msg.created_at)}</p>
+                        <p class="text-green-800">${confirmText}</p>
+                        <p class="text-xs text-green-500 mt-2">${formatTime(msg.created_at)}</p>
                     </div>
                 </div>
             `;
@@ -408,9 +412,9 @@
             // Regular text message - bubble style
             return `
                 <div class="flex ${msg.is_mine ? 'justify-end' : 'justify-start'}">
-                    <div class="max-w-[75%] px-4 py-2 rounded-2xl ${msg.is_mine ? 'bg-brand-blue text-white' : 'bg-gray-100 text-gray-900'}">
+                    <div class="max-w-[75%] px-4 py-2 rounded-2xl ${msg.is_mine ? 'bg-brand-blue text-white' : 'bg-brand-pink text-white'}">
                         <p class="whitespace-pre-wrap break-words">${escapeHtml(msg.content)}</p>
-                        <p class="text-xs ${msg.is_mine ? 'text-blue-100' : 'text-gray-500'} mt-1">${formatTime(msg.created_at)}</p>
+                        <p class="text-xs ${msg.is_mine ? 'text-blue-100' : 'text-pink-100'} mt-1">${formatTime(msg.created_at)}</p>
                     </div>
                 </div>
             `;
