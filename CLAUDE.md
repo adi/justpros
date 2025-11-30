@@ -115,6 +115,20 @@ When helping design or modify features, prioritize:
    - Clear, simple README explaining how to run locally.
    - Code structured so others can reasonably contribute.
 
+5. **Connections**
+   - Claim-based: One user describes relationship in a sentence
+   - Mutually confirmed: Other party must confirm for public visibility
+   - Confirm/Ignore flow: Pending claims can be confirmed or ignored
+   - Auto-ignore: Claims not acted on within 30 days are auto-ignored
+   - Late confirmation: Ignored claims can be confirmed later
+   - Re-ignore: Confirmed claims can be re-ignored at any time
+   - Crowd-validated: Mutual connections can vote on claim credibility with Confirm/Infirm
+   - Visibly ordered: Connections displayed strongest-first
+   - Time decay: Power based on original claim date, asymptotically approaches 0 with a half time of 3 years
+   - Anti-spam: Claim creation rate limits (3/day per pair, 100/day global), Abuse reports rate limits (1/day per user, 100/day global)
+   - Karma system: 15 points, deductions for abuse, 1 point/month regen
+   - LLM-evaluated abuse reports as no one is able to manually do this work
+
 If a requested feature conflicts with the principles (e.g. growth-hacky engagement tricks), highlight the conflict and propose a simpler, more principled alternative.
 
 ---
@@ -232,6 +246,6 @@ git tag v0.x.x && git push origin v0.x.x
 
 ### Next Steps
 
-- Public profile pages (`/u/{handle}`)
+- Connections system (claim-based, mutually confirmed)
 - Posts & chronological feed
 - Basic search by name and skills
