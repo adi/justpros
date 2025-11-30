@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}{{ name or handle }} - JustPros{% endblock %}
-{% block og_title %}{{ name or handle }} - JustPros{% endblock %}
+{% block title %}{{ name or handle }} | JustPros{% endblock %}
+{% block og_title %}{{ name or handle }} | JustPros{% endblock %}
 {% block og_description %}{{ headline or "Professional on JustPros" }}{% endblock %}
 {% block og_url %}/u/{{ handle }}{% endblock %}
 {% if og_image %}{% block og_image %}{{ og_image }}{% endblock %}{% endif %}
-{% block twitter_title %}{{ name or handle }} - JustPros{% endblock %}
+{% block twitter_title %}{{ name or handle }} | JustPros{% endblock %}
 {% block twitter_description %}{{ headline or "Professional on JustPros" }}{% endblock %}
 {% if og_image %}{% block twitter_image %}{{ og_image }}{% endblock %}{% endif %}
 {% block content %}
@@ -181,7 +181,7 @@
             }
 
             if (data.name) {
-                document.title = `${data.name} - JustPros`;
+                document.title = `${data.name} | JustPros`;
             }
 
             // Load button state first (needed to check if connected)
