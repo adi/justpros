@@ -28,7 +28,7 @@
                         <h1 id="profile-name" class="text-2xl font-bold text-gray-900"></h1>
                         <p id="profile-headline" class="text-gray-600 mt-1"></p>
                     </div>
-                    <button id="connect-btn" class="hidden bg-brand-blue text-white px-4 py-2 rounded-md hover:opacity-90 text-sm font-medium flex-shrink-0">
+                    <button id="connect-btn" class="hidden px-4 py-2 rounded-md text-sm font-medium flex-shrink-0">
                         Connect
                     </button>
                 </div>
@@ -39,18 +39,118 @@
         </div>
     </div>
 
-    <!-- Future: Posts will go here -->
+    <!-- Connections Section -->
+    <div id="connections-section" class="hidden bg-white rounded-lg shadow mt-4 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Connections</h2>
+        <div id="connections-list" class="space-y-3"></div>
+        <p id="no-connections" class="hidden text-gray-500 text-sm">No connections yet</p>
+    </div>
+</div>
+
+<!-- Compose Overlay (Gmail-style) -->
+<div id="compose-overlay" class="hidden fixed bottom-4 right-4 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-t-lg shadow-2xl z-50 flex flex-col" style="max-height: 70vh;">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-4 py-2 bg-gray-800 text-white rounded-t-lg cursor-move" id="compose-header">
+        <span class="font-medium text-sm">Connect with <span id="compose-name"></span></span>
+        <div class="flex items-center gap-1">
+            <button onclick="minimizeCompose()" class="p-1 hover:bg-gray-700 rounded" title="Minimize">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+            </button>
+            <button onclick="closeCompose()" class="p-1 hover:bg-gray-700 rounded" title="Close">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Body -->
+    <div id="compose-body" class="flex-1 overflow-y-auto p-4">
+        <!-- To field -->
+        <div class="flex items-center gap-2 pb-2 border-b border-gray-200 mb-3">
+            <span class="text-sm text-gray-500">To:</span>
+            <div class="flex items-center gap-2">
+                <img id="compose-avatar" src="/static/default-avatar.svg" class="w-6 h-6 rounded-full object-cover">
+                <span id="compose-handle" class="text-sm font-medium"></span>
+            </div>
+        </div>
+
+        <p class="text-sm text-gray-600 mb-3">How do you know this person?</p>
+
+        <!-- Preset buttons -->
+        <div class="flex flex-wrap gap-2 mb-4">
+            <button onclick="selectPreset('Worked together')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Worked together</button>
+            <button onclick="selectPreset('Was my manager')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Was my manager</button>
+            <button onclick="selectPreset('Was my report')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Was my report</button>
+            <button onclick="selectPreset('Collaborated on a project')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Collaborated on a project</button>
+            <button onclick="selectPreset('Met at an event')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Met at an event</button>
+            <button onclick="selectPreset('Classmates')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Classmates</button>
+        </div>
+
+        <!-- Custom claim input -->
+        <div class="mb-3">
+            <textarea id="claim-input" placeholder="Describe your connection..." maxlength="200" rows="3"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none text-sm"></textarea>
+            <p class="text-xs text-gray-500 mt-1"><span id="claim-length">0</span>/200</p>
+        </div>
+
+        <div id="compose-error" class="hidden text-red-600 text-sm mb-3"></div>
+    </div>
+
+    <!-- Footer -->
+    <div class="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+        <button onclick="submitConnection()" id="submit-connect-btn" class="px-4 py-2 bg-brand-blue text-white rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50" disabled>
+            Send
+        </button>
+        <button onclick="closeCompose()" class="text-gray-500 hover:text-gray-700 text-sm">Discard</button>
+    </div>
+</div>
+
+<!-- Minimized compose bar -->
+<div id="compose-minimized" class="hidden fixed bottom-0 right-4 bg-gray-800 text-white rounded-t-lg shadow-lg z-50 cursor-pointer" onclick="restoreCompose()">
+    <div class="px-4 py-2 flex items-center gap-3">
+        <span class="text-sm font-medium">Connect with <span id="minimized-name"></span></span>
+        <button onclick="event.stopPropagation(); closeCompose()" class="p-1 hover:bg-gray-700 rounded">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+    </div>
+</div>
+
+<!-- Respond Modal (for incoming requests) -->
+<div id="respond-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-900">Connection Request</h2>
+                <button onclick="closeRespondModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <p class="text-gray-600 mb-2"><span id="respond-name" class="font-medium"></span> wants to connect:</p>
+            <p id="respond-claim" class="text-gray-900 bg-gray-100 p-3 rounded-md mb-4 italic"></p>
+
+            <div id="respond-error" class="hidden text-red-600 text-sm mb-4"></div>
+
+            <div class="flex gap-3">
+                <button onclick="ignoreConnection()" class="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">Ignore</button>
+                <button onclick="confirmConnection()" class="flex-1 px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90">Confirm</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
     const handle = '{{ handle }}';
+    let profileName = '';
+    let statusData = null;  // New: stores full status response
+    let currentPendingClaim = null;  // Currently selected pending claim for respond modal
 
     async function loadPublicProfile() {
         try {
             const response = await fetch(`/api/u/${encodeURIComponent(handle)}`);
 
             if (response.status === 404) {
-                document.querySelector('.max-w-2xl').innerHTML = `
+                document.querySelector('.mt-2').innerHTML = `
                     <div class="bg-white rounded-lg shadow p-8 text-center">
                         <h1 class="text-2xl font-bold text-gray-900 mb-2">User not found</h1>
                         <p class="text-gray-600">The profile you're looking for doesn't exist.</p>
@@ -60,8 +160,9 @@
             }
 
             const data = await response.json();
+            profileName = data.name || handle;
 
-            document.getElementById('profile-name').textContent = data.name || handle;
+            document.getElementById('profile-name').textContent = profileName;
             document.getElementById('profile-headline').textContent = data.headline || '';
 
             if (data.avatar_url) {
@@ -79,43 +180,360 @@
                 ).join('');
             }
 
-            // Update page title
             if (data.name) {
                 document.title = `${data.name} - JustPros`;
             }
 
-            // Show Connect button if logged in and not viewing own profile
-            await showConnectButton();
+            // Load button state first (needed to check if connected)
+            await updateConnectButton();
+
+            // Only load connections if viewer is connected to profile owner
+            if (statusData && statusData.is_connected) {
+                await loadConnections();
+            }
         } catch (error) {
             console.error('Failed to load profile:', error);
         }
     }
 
-    async function showConnectButton() {
+    async function loadConnections() {
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch(`/api/connections/u/${encodeURIComponent(handle)}`);
+            if (!response.ok) return;
+
+            const connections = await response.json();
+            const section = document.getElementById('connections-section');
+            const list = document.getElementById('connections-list');
+            const noConnections = document.getElementById('no-connections');
+
+            section.classList.remove('hidden');
+
+            if (connections.length === 0) {
+                noConnections.classList.remove('hidden');
+                return;
+            }
+
+            // Build connection cards with claims and vote buttons
+            list.innerHTML = connections.map(conn => `
+                <div class="p-2 -mx-2 rounded-lg hover:bg-gray-50">
+                    <a href="/u/${conn.handle}" class="flex items-start gap-3">
+                        <img src="${conn.avatar_url || '/static/default-avatar.svg'}" alt=""
+                            class="w-10 h-10 rounded-full object-cover bg-gray-200 flex-shrink-0">
+                        <div class="flex-1 min-w-0">
+                            <div class="font-medium text-gray-900 truncate">${conn.name || conn.handle}</div>
+                        </div>
+                    </a>
+                    <div class="ml-13 mt-2 space-y-2">
+                        ${conn.claims.map(c => `
+                            <div class="flex items-center gap-2 text-sm">
+                                <span class="text-gray-500 italic truncate flex-1">"${c.claim}"</span>
+                                <div class="flex gap-1 flex-shrink-0" data-claim-id="${c.id}">
+                                    <button onclick="voteClaim(${c.id}, 1)" class="vote-btn vote-up p-1 rounded hover:bg-green-100 text-gray-400 hover:text-green-600" title="Confirm this claim">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+                                    </button>
+                                    <button onclick="voteClaim(${c.id}, -1)" class="vote-btn vote-down p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600" title="Dispute this claim">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        } catch (e) {
+            console.error('Failed to load connections:', e);
+        }
+    }
+
+    async function voteClaim(claimId, vote) {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        // Check if token is valid
+        try {
+            const response = await fetch(`/api/connections/${claimId}/vote`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ vote })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                alert(data.detail || 'Cannot vote on this claim');
+                return;
+            }
+
+            // Update button styles to show vote was recorded
+            const container = document.querySelector(`[data-claim-id="${claimId}"]`);
+            if (container) {
+                container.querySelectorAll('.vote-btn').forEach(btn => {
+                    btn.classList.remove('text-green-600', 'text-red-600', 'bg-green-100', 'bg-red-100');
+                    btn.classList.add('text-gray-400');
+                });
+                const activeBtn = vote === 1 ? container.querySelector('.vote-up') : container.querySelector('.vote-down');
+                if (activeBtn) {
+                    activeBtn.classList.remove('text-gray-400');
+                    activeBtn.classList.add(vote === 1 ? 'text-green-600' : 'text-red-600');
+                    activeBtn.classList.add(vote === 1 ? 'bg-green-100' : 'bg-red-100');
+                }
+            }
+        } catch (e) {
+            console.error('Failed to vote:', e);
+        }
+    }
+
+    async function updateConnectButton() {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
         const payload = parseJwt(token);
         if (!payload || payload.exp * 1000 <= Date.now()) return;
 
-        // Get current user's handle to check if viewing own profile
         try {
-            const response = await fetch('/api/me', {
+            // Check if viewing own profile
+            const meResponse = await fetch('/api/me', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!response.ok) return;
+            if (!meResponse.ok) return;
 
-            const me = await response.json();
-            // Don't show Connect button on own profile
-            if (me.handle === handle) return;
+            const me = await meResponse.json();
+            if (me.handle === handle) return; // Own profile
 
-            // Show the Connect button
-            document.getElementById('connect-btn').classList.remove('hidden');
+            // Get connection status (new multi-claim format)
+            const statusResponse = await fetch(`/api/connections/status/${encodeURIComponent(handle)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!statusResponse.ok) return;
+
+            statusData = await statusResponse.json();
+
+            const btn = document.getElementById('connect-btn');
+
+            // Multi-claim button logic - only show if can send more
+            if (statusData.can_send_more) {
+                btn.textContent = statusData.is_connected ? '+ Add Claim' : 'Connect';
+                btn.className = 'bg-brand-blue text-white px-4 py-2 rounded-md text-sm font-medium flex-shrink-0 hover:opacity-90';
+                btn.onclick = openCompose;
+                btn.classList.remove('hidden');
+            } else {
+                // Rate limited - hide the button entirely
+                btn.classList.add('hidden');
+            }
+
+            // Show respond button if they have pending claims to me
+            if (statusData.pending_received && statusData.pending_received.length > 0) {
+                showRespondButton(statusData.pending_received.length);
+            }
         } catch (e) {
-            console.error('Failed to check current user:', e);
+            console.error('Failed to check connection status:', e);
         }
     }
+
+    function showRespondButton(count) {
+        // Add a respond button/badge next to the connect button
+        let respondBtn = document.getElementById('respond-btn');
+        if (!respondBtn) {
+            respondBtn = document.createElement('button');
+            respondBtn.id = 'respond-btn';
+            const connectBtn = document.getElementById('connect-btn');
+            connectBtn.parentNode.insertBefore(respondBtn, connectBtn.nextSibling);
+        }
+        respondBtn.textContent = `Respond (${count})`;
+        respondBtn.className = 'bg-brand-pink text-white px-4 py-2 rounded-md text-sm font-medium flex-shrink-0 hover:opacity-90 ml-2';
+        respondBtn.onclick = openRespondModal;
+    }
+
+    // Compose overlay functions
+    let composeAvatarUrl = null;
+
+    function openCompose() {
+        document.getElementById('compose-name').textContent = profileName;
+        document.getElementById('minimized-name').textContent = profileName;
+        document.getElementById('compose-handle').textContent = profileName;
+        document.getElementById('compose-avatar').src = document.getElementById('avatar-image').src;
+        document.getElementById('claim-input').value = '';
+        document.getElementById('claim-length').textContent = '0';
+        document.getElementById('compose-error').classList.add('hidden');
+        document.getElementById('submit-connect-btn').disabled = true;
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue'));
+        document.getElementById('compose-overlay').classList.remove('hidden');
+        document.getElementById('compose-minimized').classList.add('hidden');
+        document.getElementById('claim-input').focus();
+    }
+
+    function closeCompose() {
+        document.getElementById('compose-overlay').classList.add('hidden');
+        document.getElementById('compose-minimized').classList.add('hidden');
+    }
+
+    function minimizeCompose() {
+        document.getElementById('compose-overlay').classList.add('hidden');
+        document.getElementById('compose-minimized').classList.remove('hidden');
+    }
+
+    function restoreCompose() {
+        document.getElementById('compose-overlay').classList.remove('hidden');
+        document.getElementById('compose-minimized').classList.add('hidden');
+    }
+
+    function selectPreset(text) {
+        document.getElementById('claim-input').value = text;
+        document.getElementById('claim-length').textContent = text.length;
+        document.getElementById('submit-connect-btn').disabled = text.length < 3;
+
+        // Highlight selected preset
+        document.querySelectorAll('.preset-btn').forEach(b => {
+            if (b.textContent === text) {
+                b.classList.add('bg-brand-blue', 'text-white', 'border-brand-blue');
+            } else {
+                b.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue');
+            }
+        });
+    }
+
+    // Claim input event listener
+    document.getElementById('claim-input').addEventListener('input', (e) => {
+        const len = e.target.value.length;
+        document.getElementById('claim-length').textContent = len;
+        document.getElementById('submit-connect-btn').disabled = len < 3;
+
+        // Clear preset highlights when typing custom
+        document.querySelectorAll('.preset-btn').forEach(b => {
+            if (b.textContent !== e.target.value) {
+                b.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue');
+            }
+        });
+    });
+
+    async function submitConnection() {
+        const token = localStorage.getItem('token');
+        const claim = document.getElementById('claim-input').value.trim();
+        const errorEl = document.getElementById('compose-error');
+        const submitBtn = document.getElementById('submit-connect-btn');
+
+        if (claim.length < 3) {
+            errorEl.textContent = 'Claim must be at least 3 characters';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Sending...';
+
+        try {
+            const response = await fetch('/api/connections', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ to_handle: handle, claim })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.detail || 'Failed to send connection request');
+            }
+
+            closeCompose();
+            await updateConnectButton();
+        } catch (e) {
+            errorEl.textContent = e.message;
+            errorEl.classList.remove('hidden');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Send';
+        }
+    }
+
+    // Respond Modal functions
+    function openRespondModal() {
+        // Use pending claims from statusData (already fetched)
+        if (!statusData || !statusData.pending_received || statusData.pending_received.length === 0) {
+            return;
+        }
+
+        // Show the first pending claim (user can confirm/ignore each one)
+        currentPendingClaim = statusData.pending_received[0];
+        document.getElementById('respond-name').textContent = profileName;
+        document.getElementById('respond-claim').textContent = `"${currentPendingClaim.claim}"`;
+        document.getElementById('respond-error').classList.add('hidden');
+        document.getElementById('respond-modal').classList.remove('hidden');
+    }
+
+    function closeRespondModal() {
+        document.getElementById('respond-modal').classList.add('hidden');
+        currentPendingClaim = null;
+    }
+
+    async function confirmConnection() {
+        if (!currentPendingClaim) return;
+
+        const token = localStorage.getItem('token');
+        const errorEl = document.getElementById('respond-error');
+
+        try {
+            const response = await fetch(`/api/connections/${currentPendingClaim.id}/confirm`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.detail || 'Failed to confirm connection');
+            }
+
+            closeRespondModal();
+            await updateConnectButton();
+            // If now connected, load connections
+            if (statusData && statusData.is_connected) {
+                await loadConnections();
+            }
+        } catch (e) {
+            errorEl.textContent = e.message;
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    async function ignoreConnection() {
+        if (!currentPendingClaim) return;
+
+        const token = localStorage.getItem('token');
+        const errorEl = document.getElementById('respond-error');
+
+        try {
+            const response = await fetch(`/api/connections/${currentPendingClaim.id}/ignore`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.detail || 'Failed to ignore connection');
+            }
+
+            closeRespondModal();
+            await updateConnectButton();
+        } catch (e) {
+            errorEl.textContent = e.message;
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    // Close modals on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeCompose();
+            closeRespondModal();
+        }
+    });
+
+    // Close respond modal on backdrop click
+    document.getElementById('respond-modal').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) closeRespondModal();
+    });
 
     loadPublicProfile();
 </script>

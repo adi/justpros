@@ -49,6 +49,18 @@ async def settings_page(request: Request) -> HTMLResponse:
     return request.app.state.templates.TemplateResponse(request, "settings.html")
 
 
+@router.api_route("/messages", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def messages_page(request: Request) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(request, "messages.html")
+
+
+@router.api_route("/messages/{handle}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def messages_conversation_page(request: Request, handle: str) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(
+        request, "messages.html", {"selected_handle": handle}
+    )
+
+
 @router.api_route("/u/{handle}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def public_profile_page(request: Request, handle: str) -> HTMLResponse:
     # Fetch user data for OG meta tags

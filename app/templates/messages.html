@@ -1,0 +1,628 @@
+{% extends "base.html" %}
+{% block title %}Messages - JustPros{% endblock %}
+{% block content %}
+<div class="flex h-[calc(100vh-140px)] bg-white rounded-lg shadow overflow-hidden">
+    <!-- Conversations List (left panel) -->
+    <div id="conversations-panel" class="w-full sm:w-80 sm:min-w-[320px] border-r border-gray-200 flex flex-col">
+        <div class="p-4 border-b border-gray-200">
+            <h1 class="text-xl font-bold text-gray-900">Messages</h1>
+        </div>
+
+        <!-- Folder Tabs -->
+        <div class="flex border-b border-gray-200">
+            <button onclick="switchFolder('inbox')" id="tab-inbox" class="flex-1 py-2 text-sm font-medium border-b-2 border-brand-blue text-brand-blue relative">
+                Inbox
+                <span id="inbox-badge" class="hidden absolute top-1 right-2 w-5 h-5 bg-brand-pink text-white text-xs rounded-full flex items-center justify-center font-medium"></span>
+            </button>
+            <button onclick="switchFolder('sent')" id="tab-sent" class="flex-1 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                Sent
+            </button>
+            <button onclick="switchFolder('archive')" id="tab-archive" class="flex-1 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                Archive
+            </button>
+        </div>
+
+        <!-- Inbox Folder (conversations + pending claims) -->
+        <div id="folder-inbox" class="flex-1 overflow-y-auto flex flex-col">
+            <!-- Pending claims section -->
+            <div id="pending-section" class="hidden border-b border-gray-200">
+                <div id="pending-list"></div>
+            </div>
+            <!-- Conversations -->
+            <div id="conversations-list" class="flex-1 overflow-y-auto"></div>
+            <div id="no-inbox-content" class="hidden flex-1 flex items-center justify-center p-4">
+                <p class="text-gray-500 text-center">No messages yet.<br>Connect with someone to start chatting!</p>
+            </div>
+        </div>
+
+        <!-- Sent Folder (claims I've sent) -->
+        <div id="folder-sent" class="hidden flex-1 overflow-y-auto">
+            <div id="sent-list"></div>
+            <div id="no-sent" class="hidden flex-1 flex items-center justify-center p-4">
+                <p class="text-gray-500 text-center">No sent requests</p>
+            </div>
+        </div>
+
+        <!-- Archive Folder (my responded claims) -->
+        <div id="folder-archive" class="hidden flex-1 overflow-y-auto">
+            <div id="archive-list"></div>
+            <div id="no-archive" class="hidden flex-1 flex items-center justify-center p-4">
+                <p class="text-gray-500 text-center">No archived requests</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Panel (right panel) -->
+    <div id="chat-panel" class="hidden sm:flex flex-1 flex-col">
+        <!-- Empty state -->
+        <div id="chat-empty" class="flex-1 flex items-center justify-center">
+            <p class="text-gray-500">Select a conversation to start messaging</p>
+        </div>
+
+        <!-- Chat header -->
+        <div id="chat-header" class="hidden p-4 border-b border-gray-200 flex items-center gap-3">
+            <button onclick="closeChat()" class="sm:hidden text-gray-500 hover:text-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <a id="chat-avatar-link" href="#">
+                <img id="chat-avatar" src="/static/default-avatar.svg" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200">
+            </a>
+            <div class="flex-1 min-w-0">
+                <a id="chat-name-link" href="#" class="font-medium text-gray-900 hover:underline truncate block"></a>
+                <p id="chat-headline" class="text-sm text-gray-500 truncate"></p>
+            </div>
+        </div>
+
+        <!-- Messages container -->
+        <div id="chat-messages" class="hidden flex-1 overflow-y-auto p-4 space-y-3"></div>
+
+        <!-- Message input -->
+        <div id="chat-input-container" class="hidden p-4 border-t border-gray-200">
+            <div id="chat-blocked-message" class="hidden text-center text-gray-500 text-sm py-2"></div>
+            <form id="message-form" class="flex gap-2">
+                <input type="text" id="message-input" placeholder="Type a message..." maxlength="2000"
+                    class="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                <button type="submit" class="px-4 py-2 bg-brand-blue text-white rounded-full hover:opacity-90 disabled:opacity-50">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    const selectedHandle = '{{ selected_handle | default("") }}';
+    let currentConversationId = null;
+    let currentOtherHandle = null;
+    let canMessage = false;
+    let currentFolder = 'inbox';
+
+    async function init() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        await Promise.all([
+            loadInbox(),
+            loadSent(),
+            loadArchive()
+        ]);
+
+        // If a handle was specified in URL, open that conversation
+        if (selectedHandle) {
+            await openConversationByHandle(selectedHandle);
+        }
+    }
+
+    function switchFolder(folder) {
+        currentFolder = folder;
+
+        // Update tab styles
+        ['inbox', 'sent', 'archive'].forEach(f => {
+            const tab = document.getElementById(`tab-${f}`);
+            const folderEl = document.getElementById(`folder-${f}`);
+            if (f === folder) {
+                tab.classList.add('border-brand-blue', 'text-brand-blue');
+                tab.classList.remove('border-transparent', 'text-gray-500');
+                folderEl.classList.remove('hidden');
+            } else {
+                tab.classList.remove('border-brand-blue', 'text-brand-blue');
+                tab.classList.add('border-transparent', 'text-gray-500');
+                folderEl.classList.add('hidden');
+            }
+        });
+    }
+
+    async function loadInbox() {
+        const token = localStorage.getItem('token');
+        try {
+            // Load both pending claims and conversations
+            const [pendingRes, conversationsRes] = await Promise.all([
+                fetch('/api/connections/pending', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/messages', { headers: { 'Authorization': `Bearer ${token}` } })
+            ]);
+
+            if (!pendingRes.ok || !conversationsRes.ok) return;
+
+            const pending = await pendingRes.json();
+            const conversations = await conversationsRes.json();
+
+            const pendingSection = document.getElementById('pending-section');
+            const pendingList = document.getElementById('pending-list');
+            const conversationsList = document.getElementById('conversations-list');
+            const empty = document.getElementById('no-inbox-content');
+            const badge = document.getElementById('inbox-badge');
+
+            // Handle pending claims
+            if (pending.length === 0) {
+                pendingSection.classList.add('hidden');
+                badge.classList.add('hidden');
+            } else {
+                pendingSection.classList.remove('hidden');
+                badge.textContent = pending.length > 9 ? '9+' : pending.length;
+                badge.classList.remove('hidden');
+
+                pendingList.innerHTML = pending.map(conn => `
+                    <div class="px-4 py-3 border-b border-gray-100 last:border-b-0 bg-pink-50">
+                        <div class="flex items-center gap-3">
+                            <a href="/u/${conn.handle}">
+                                <img src="${conn.avatar_url || '/static/default-avatar.svg'}" alt=""
+                                    class="w-10 h-10 rounded-full object-cover bg-gray-200">
+                            </a>
+                            <div class="flex-1 min-w-0">
+                                <a href="/u/${conn.handle}" class="font-medium text-gray-900 hover:underline truncate block">${conn.name || conn.handle}</a>
+                                <p class="text-sm text-gray-500 truncate italic">"${conn.claim}"</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-2 mt-2 ml-13">
+                            <button onclick="confirmConnection(${conn.id})" class="flex-1 px-3 py-1.5 bg-brand-blue text-white text-sm rounded-md hover:opacity-90">Confirm</button>
+                            <button onclick="ignoreConnection(${conn.id})" class="flex-1 px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-50">Ignore</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // Handle conversations
+            if (conversations.length === 0 && pending.length === 0) {
+                conversationsList.classList.add('hidden');
+                empty.classList.remove('hidden');
+            } else {
+                empty.classList.add('hidden');
+                if (conversations.length === 0) {
+                    conversationsList.innerHTML = '';
+                } else {
+                    conversationsList.classList.remove('hidden');
+                    conversationsList.innerHTML = conversations.map(conv => `
+                        <button onclick="openConversation(${conv.id}, '${conv.other_user.handle}')"
+                            class="conversation-item w-full p-4 flex items-center gap-3 hover:bg-gray-50 text-left ${currentConversationId === conv.id ? 'bg-gray-100' : ''}"
+                            data-conv-id="${conv.id}">
+                            <img src="${conv.other_user.avatar_url || '/static/default-avatar.svg'}" alt=""
+                                class="w-12 h-12 rounded-full object-cover bg-gray-200 flex-shrink-0">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-medium text-gray-900 truncate">${conv.other_user.name || conv.other_user.handle}</span>
+                                    ${conv.unread_count > 0 ? `<span class="w-5 h-5 bg-brand-pink text-white text-xs rounded-full flex items-center justify-center font-medium flex-shrink-0">${conv.unread_count}</span>` : ''}
+                                </div>
+                                <p class="text-sm text-gray-500 truncate">${conv.last_message_is_mine ? 'You: ' : ''}${conv.last_message || 'No messages yet'}</p>
+                            </div>
+                        </button>
+                    `).join('');
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load inbox:', e);
+        }
+    }
+
+    async function loadSent() {
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch('/api/connections/sent', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) return;
+
+            const sent = await response.json();
+            const list = document.getElementById('sent-list');
+            const empty = document.getElementById('no-sent');
+
+            if (sent.length === 0) {
+                list.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+
+            empty.classList.add('hidden');
+
+            list.innerHTML = sent.map(conn => {
+                const statusBadge = conn.status === 'confirmed'
+                    ? '<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Confirmed</span>'
+                    : '<span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Pending</span>';
+
+                return `
+                <div class="px-4 py-3 border-b border-gray-100 last:border-b-0">
+                    <div class="flex items-center gap-3">
+                        <a href="/u/${conn.handle}">
+                            <img src="${conn.avatar_url || '/static/default-avatar.svg'}" alt=""
+                                class="w-10 h-10 rounded-full object-cover bg-gray-200">
+                        </a>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <a href="/u/${conn.handle}" class="font-medium text-gray-900 hover:underline truncate">${conn.name || conn.handle}</a>
+                                ${statusBadge}
+                            </div>
+                            <p class="text-sm text-gray-500 truncate italic">"${conn.claim}"</p>
+                        </div>
+                    </div>
+                    ${conn.status !== 'confirmed' ? `
+                    <div class="flex gap-2 mt-2 ml-13">
+                        <button onclick="rescindClaim(${conn.id})" class="px-3 py-1.5 border border-red-300 text-red-600 text-sm rounded-md hover:bg-red-50">Rescind</button>
+                    </div>
+                    ` : ''}
+                </div>
+            `}).join('');
+        } catch (e) {
+            console.error('Failed to load sent:', e);
+        }
+    }
+
+    async function loadArchive() {
+        const token = localStorage.getItem('token');
+        try {
+            // Load both confirmed (claims I confirmed as receiver) and ignored claims
+            const [confirmedRes, ignoredRes] = await Promise.all([
+                fetch('/api/connections/confirmed-received', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/connections/ignored', { headers: { 'Authorization': `Bearer ${token}` } })
+            ]);
+
+            if (!confirmedRes.ok || !ignoredRes.ok) return;
+
+            const confirmed = await confirmedRes.json();
+            const ignored = await ignoredRes.json();
+
+            const list = document.getElementById('archive-list');
+            const empty = document.getElementById('no-archive');
+
+            // Combine confirmed and ignored, sorted by response date
+            const archived = [
+                ...confirmed.map(c => ({ ...c, myStatus: 'confirmed', sortDate: c.confirmed_at })),
+                ...ignored.map(c => ({ ...c, myStatus: 'ignored', sortDate: c.ignored_at }))
+            ].sort((a, b) => new Date(b.sortDate || b.created_at) - new Date(a.sortDate || a.created_at));
+
+            if (archived.length === 0) {
+                list.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+
+            empty.classList.add('hidden');
+
+            list.innerHTML = archived.map(conn => {
+                const statusBadge = conn.myStatus === 'ignored'
+                    ? '<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Ignored</span>'
+                    : '<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Confirmed</span>';
+
+                const actionBtn = conn.myStatus === 'ignored'
+                    ? `<button onclick="confirmConnection(${conn.id})" class="px-3 py-1.5 bg-brand-blue text-white text-sm rounded-md hover:opacity-90">Confirm Instead</button>`
+                    : `<button onclick="ignoreConnection(${conn.id})" class="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-50">Ignore Instead</button>`;
+
+                return `
+                <div class="px-4 py-3 border-b border-gray-100 last:border-b-0">
+                    <div class="flex items-center gap-3">
+                        <a href="/u/${conn.handle}">
+                            <img src="${conn.avatar_url || '/static/default-avatar.svg'}" alt=""
+                                class="w-10 h-10 rounded-full object-cover bg-gray-200">
+                        </a>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <a href="/u/${conn.handle}" class="font-medium text-gray-900 hover:underline truncate">${conn.name || conn.handle}</a>
+                                ${statusBadge}
+                            </div>
+                            <p class="text-sm text-gray-500 truncate italic">"${conn.claim}"</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 mt-2 ml-13">
+                        ${actionBtn}
+                    </div>
+                </div>
+            `}).join('');
+        } catch (e) {
+            console.error('Failed to load archive:', e);
+        }
+    }
+
+    async function confirmConnection(connectionId) {
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch(`/api/connections/${connectionId}/confirm`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                await Promise.all([loadInbox(), loadArchive()]);
+            }
+        } catch (e) {
+            console.error('Failed to confirm:', e);
+        }
+    }
+
+    async function ignoreConnection(connectionId) {
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch(`/api/connections/${connectionId}/ignore`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                await Promise.all([loadInbox(), loadArchive()]);
+            }
+        } catch (e) {
+            console.error('Failed to ignore:', e);
+        }
+    }
+
+    async function rescindClaim(connectionId) {
+        if (!confirm('Are you sure you want to rescind this claim?')) return;
+
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch(`/api/connections/${connectionId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                await loadSent();
+            } else {
+                const error = await response.json();
+                alert(error.detail || 'Failed to rescind claim');
+            }
+        } catch (e) {
+            console.error('Failed to rescind:', e);
+        }
+    }
+
+    async function openConversationByHandle(handle) {
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch(`/api/messages/with/${encodeURIComponent(handle)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) return;
+
+            const data = await response.json();
+            if (data.conversation_id) {
+                await openConversation(data.conversation_id, handle);
+            } else {
+                // No conversation yet, but might be able to start one
+                await showNewConversation(data);
+            }
+        } catch (e) {
+            console.error('Failed to open conversation:', e);
+        }
+    }
+
+    async function openConversation(conversationId, handle) {
+        currentConversationId = conversationId;
+        currentOtherHandle = handle;
+
+        // Update URL without reload
+        history.replaceState(null, '', `/messages/${handle}`);
+
+        // Show chat panel on mobile
+        document.getElementById('conversations-panel').classList.add('hidden', 'sm:flex');
+        document.getElementById('conversations-panel').classList.remove('flex');
+        document.getElementById('chat-panel').classList.remove('hidden');
+        document.getElementById('chat-panel').classList.add('flex');
+
+        // Highlight selected conversation
+        document.querySelectorAll('.conversation-item').forEach(item => {
+            item.classList.toggle('bg-gray-100', item.dataset.convId == conversationId);
+        });
+
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch(`/api/messages/${conversationId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) return;
+
+            const data = await response.json();
+            showChatUI(data);
+
+            // Check if can message
+            const statusResponse = await fetch(`/api/messages/with/${encodeURIComponent(handle)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (statusResponse.ok) {
+                const statusData = await statusResponse.json();
+                canMessage = statusData.can_message;
+                updateInputState(statusData);
+            }
+
+            // Refresh conversations to clear unread badge
+            await loadConversations();
+        } catch (e) {
+            console.error('Failed to load messages:', e);
+        }
+    }
+
+    async function showNewConversation(data) {
+        currentConversationId = null;
+        currentOtherHandle = data.other_user.handle;
+        canMessage = data.can_message;
+
+        // Update URL
+        history.replaceState(null, '', `/messages/${data.other_user.handle}`);
+
+        // Show chat panel on mobile
+        document.getElementById('conversations-panel').classList.add('hidden', 'sm:flex');
+        document.getElementById('conversations-panel').classList.remove('flex');
+        document.getElementById('chat-panel').classList.remove('hidden');
+        document.getElementById('chat-panel').classList.add('flex');
+
+        // Show empty chat with user info
+        document.getElementById('chat-empty').classList.add('hidden');
+        document.getElementById('chat-header').classList.remove('hidden');
+        document.getElementById('chat-messages').classList.remove('hidden');
+        document.getElementById('chat-input-container').classList.remove('hidden');
+
+        const profileUrl = `/u/${data.other_user.handle}`;
+        document.getElementById('chat-avatar-link').href = profileUrl;
+        document.getElementById('chat-avatar').src = data.other_user.avatar_url || '/static/default-avatar.svg';
+        document.getElementById('chat-name-link').href = profileUrl;
+        document.getElementById('chat-name-link').textContent = data.other_user.name || data.other_user.handle;
+        document.getElementById('chat-headline').textContent = data.other_user.headline || '';
+
+        document.getElementById('chat-messages').innerHTML = '<p class="text-center text-gray-500">Start a conversation</p>';
+
+        updateInputState(data);
+    }
+
+    function showChatUI(data) {
+        document.getElementById('chat-empty').classList.add('hidden');
+        document.getElementById('chat-header').classList.remove('hidden');
+        document.getElementById('chat-messages').classList.remove('hidden');
+        document.getElementById('chat-input-container').classList.remove('hidden');
+
+        const profileUrl = `/u/${data.other_user.handle}`;
+        document.getElementById('chat-avatar-link').href = profileUrl;
+        document.getElementById('chat-avatar').src = data.other_user.avatar_url || '/static/default-avatar.svg';
+        document.getElementById('chat-name-link').href = profileUrl;
+        document.getElementById('chat-name-link').textContent = data.other_user.name || data.other_user.handle;
+        document.getElementById('chat-headline').textContent = data.other_user.headline || '';
+
+        const messagesContainer = document.getElementById('chat-messages');
+        if (data.messages.length === 0) {
+            messagesContainer.innerHTML = '<p class="text-center text-gray-500">No messages yet</p>';
+        } else {
+            messagesContainer.innerHTML = data.messages.map(msg => `
+                <div class="flex ${msg.is_mine ? 'justify-end' : 'justify-start'}">
+                    <div class="max-w-[75%] px-4 py-2 rounded-2xl ${msg.is_mine ? 'bg-brand-blue text-white' : 'bg-gray-100 text-gray-900'}">
+                        <p class="whitespace-pre-wrap break-words">${escapeHtml(msg.content)}</p>
+                    </div>
+                </div>
+            `).join('');
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    }
+
+    function updateInputState(data) {
+        const form = document.getElementById('message-form');
+        const input = document.getElementById('message-input');
+        const blockedMsg = document.getElementById('chat-blocked-message');
+
+        if (data.can_message) {
+            form.classList.remove('hidden');
+            blockedMsg.classList.add('hidden');
+            input.disabled = false;
+        } else {
+            form.classList.add('hidden');
+            blockedMsg.classList.remove('hidden');
+            if (data.reason === 'already_sent_intro') {
+                blockedMsg.textContent = 'Waiting for response to your connection request';
+            } else if (data.reason === 'not_connected') {
+                blockedMsg.innerHTML = `You must <a href="/u/${currentOtherHandle}" class="text-brand-blue hover:underline">connect</a> to message this person`;
+            } else {
+                blockedMsg.textContent = 'Cannot send messages';
+            }
+        }
+    }
+
+    function closeChat() {
+        document.getElementById('conversations-panel').classList.remove('hidden', 'sm:flex');
+        document.getElementById('conversations-panel').classList.add('flex');
+        document.getElementById('chat-panel').classList.add('hidden');
+        document.getElementById('chat-panel').classList.remove('flex');
+        history.replaceState(null, '', '/messages');
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Handle message form submission
+    document.getElementById('message-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('message-input');
+        const content = input.value.trim();
+        if (!content || !canMessage) return;
+
+        const token = localStorage.getItem('token');
+        input.disabled = true;
+
+        try {
+            let url;
+            if (currentConversationId) {
+                url = `/api/messages/${currentConversationId}`;
+            } else {
+                url = `/api/messages/to/${encodeURIComponent(currentOtherHandle)}`;
+            }
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                input.value = '';
+
+                // Add message to UI
+                const messagesContainer = document.getElementById('chat-messages');
+                const noMsgText = messagesContainer.querySelector('p.text-center');
+                if (noMsgText) noMsgText.remove();
+
+                messagesContainer.innerHTML += `
+                    <div class="flex justify-end">
+                        <div class="max-w-[75%] px-4 py-2 rounded-2xl bg-brand-blue text-white">
+                            <p class="whitespace-pre-wrap break-words">${escapeHtml(content)}</p>
+                        </div>
+                    </div>
+                `;
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+                // If this was a new conversation, update the ID
+                if (!currentConversationId && data.conversation_id) {
+                    currentConversationId = data.conversation_id;
+                }
+
+                // Refresh conversations list
+                await loadConversations();
+
+                // Check if we can still message (for intro messages)
+                const statusResponse = await fetch(`/api/messages/with/${encodeURIComponent(currentOtherHandle)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (statusResponse.ok) {
+                    const statusData = await statusResponse.json();
+                    canMessage = statusData.can_message;
+                    updateInputState(statusData);
+                }
+            } else {
+                const error = await response.json();
+                alert(error.detail || 'Failed to send message');
+            }
+        } catch (e) {
+            console.error('Failed to send message:', e);
+            alert('Failed to send message');
+        } finally {
+            input.disabled = false;
+            input.focus();
+        }
+    });
+
+    init();
+</script>
+{% endblock %}
