@@ -9,8 +9,8 @@ from app.storage import get_avatar_url
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 
 # Time decay constant: exp(-lambda * days) where lambda = ln(2) / half_life_days
-# 3 year half-life = 1095 days
-TIME_DECAY_LAMBDA = 0.000633  # ln(2) / 1095
+# 3 year half-life = 1095 days -> lambda = 0.000633
+# We use this as a SQL literal since parameter binding has type issues
 
 
 class ConnectionCreate(BaseModel):
@@ -166,23 +166,8 @@ async def create_connection(
             detail="Cannot connect to yourself",
         )
 
-    # Check rate limits
+    # Check rate limits (3/day per pair, 100/day global)
     await _check_rate_limits(from_user_id, to_user_id)
-
-    # Check if connection already exists (either direction)
-    existing = await database.fetch_one(
-        """
-        SELECT id, status FROM connections
-        WHERE (from_user_id = :from_id AND to_user_id = :to_id)
-           OR (from_user_id = :to_id AND to_user_id = :from_id)
-        """,
-        {"from_id": from_user_id, "to_id": to_user_id},
-    )
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Connection already exists",
-        )
 
     # Log the attempt for rate limiting
     await _log_claim_attempt(from_user_id, to_user_id)
@@ -228,9 +213,9 @@ async def list_my_connections(
             u_to.headline as to_headline,
             u_to.avatar_path as to_avatar_path,
             (
-                EXP(-:lambda * EXTRACT(EPOCH FROM (NOW() - c.created_at)) / 86400)
-                * (1.0 + COALESCE(v.vote_sum, 0) * 0.1)
-                * (u_from.trustworthiness + u_to.trustworthiness) / 2
+                EXP(-0.000633 * EXTRACT(EPOCH FROM (NOW() - c.created_at)) / 86400.0)
+                * (1.0 + COALESCE(v.vote_sum, 0)::REAL * 0.1)
+                * (u_from.trustworthiness + u_to.trustworthiness) / 2.0
             ) AS power
         FROM connections c
         JOIN users u_from ON c.from_user_id = u_from.id
@@ -244,7 +229,7 @@ async def list_my_connections(
           AND (c.from_user_id = :user_id OR c.to_user_id = :user_id)
         ORDER BY power DESC
         """,
-        {"user_id": user_id, "lambda": TIME_DECAY_LAMBDA},
+        {"user_id": user_id},
     )
 
     results = []
@@ -380,6 +365,52 @@ async def list_ignored_connections(
             "claim": conn["claim"],
             "created_at": conn["created_at"].isoformat() if conn["created_at"] else None,
             "ignored_at": conn["ignored_at"].isoformat() if conn["ignored_at"] else None,
+        })
+
+    return results
+
+
+@router.get("/confirmed-received")
+async def list_confirmed_received_connections(
+    current_user: dict = Depends(get_current_user),
+) -> list[dict]:
+    """List claims I've confirmed (where I was the receiver)."""
+    user_id = current_user["id"]
+
+    connections = await database.fetch_all(
+        """
+        SELECT
+            c.id,
+            c.claim,
+            c.created_at,
+            c.confirmed_at,
+            u.handle,
+            u.first_name,
+            u.middle_name,
+            u.last_name,
+            u.headline,
+            u.avatar_path
+        FROM connections c
+        JOIN users u ON c.from_user_id = u.id
+        WHERE c.to_user_id = :user_id
+          AND c.status = 'confirmed'
+        ORDER BY c.confirmed_at DESC
+        """,
+        {"user_id": user_id},
+    )
+
+    results = []
+    for conn in connections:
+        avatar_path = conn["avatar_path"]
+        results.append({
+            "id": conn["id"],
+            "handle": conn["handle"],
+            "name": _format_user_name(dict(conn)),
+            "headline": conn["headline"],
+            "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
+            "claim": conn["claim"],
+            "created_at": conn["created_at"].isoformat() if conn["created_at"] else None,
+            "confirmed_at": conn["confirmed_at"].isoformat() if conn["confirmed_at"] else None,
         })
 
     return results
@@ -526,7 +557,7 @@ async def delete_connection(
 
     conn = await database.fetch_one(
         """
-        SELECT id, from_user_id FROM connections
+        SELECT id, from_user_id, to_user_id FROM connections
         WHERE id = :id
         """,
         {"id": connection_id},
@@ -541,9 +572,24 @@ async def delete_connection(
             detail="Only the creator can delete",
         )
 
+    # Delete the connection
     await database.execute(
         "DELETE FROM connections WHERE id = :id",
         {"id": connection_id},
+    )
+
+    # Also remove one rate limit log entry so user can send again
+    await database.execute(
+        """
+        DELETE FROM connection_claims_log
+        WHERE id = (
+            SELECT id FROM connection_claims_log
+            WHERE from_user_id = :from_id AND to_user_id = :to_id
+            ORDER BY created_at DESC
+            LIMIT 1
+        )
+        """,
+        {"from_id": user_id, "to_id": conn["to_user_id"]},
     )
 
     return {"message": "Connection deleted"}
@@ -551,7 +597,10 @@ async def delete_connection(
 
 @router.get("/u/{handle}")
 async def get_user_connections(handle: str) -> list[dict]:
-    """Get public connections for a user by handle."""
+    """
+    Get public connections for a user by handle.
+    Returns connections grouped by other user, with all confirmed claims.
+    """
     user = await database.fetch_one(
         "SELECT id FROM users WHERE handle = :handle",
         {"handle": handle.lower()},
@@ -582,9 +631,9 @@ async def get_user_connections(handle: str) -> list[dict]:
             u_to.headline as to_headline,
             u_to.avatar_path as to_avatar_path,
             (
-                EXP(-:lambda * EXTRACT(EPOCH FROM (NOW() - c.created_at)) / 86400)
-                * (1.0 + COALESCE(v.vote_sum, 0) * 0.1)
-                * (u_from.trustworthiness + u_to.trustworthiness) / 2
+                EXP(-0.000633 * EXTRACT(EPOCH FROM (NOW() - c.created_at)) / 86400.0)
+                * (1.0 + COALESCE(v.vote_sum, 0)::REAL * 0.1)
+                * (u_from.trustworthiness + u_to.trustworthiness) / 2.0
             ) AS power
         FROM connections c
         JOIN users u_from ON c.from_user_id = u_from.id
@@ -598,13 +647,15 @@ async def get_user_connections(handle: str) -> list[dict]:
           AND (c.from_user_id = :user_id OR c.to_user_id = :user_id)
         ORDER BY power DESC
         """,
-        {"user_id": user_id, "lambda": TIME_DECAY_LAMBDA},
+        {"user_id": user_id},
     )
 
-    results = []
+    # Group claims by the other user
+    grouped: dict[str, dict] = {}
     for conn in connections:
         # Determine which user is "the other person"
         if conn["from_user_id"] == user_id:
+            other_handle = conn["to_handle"]
             other = {
                 "handle": conn["to_handle"],
                 "first_name": conn["to_first_name"],
@@ -613,7 +664,9 @@ async def get_user_connections(handle: str) -> list[dict]:
                 "headline": conn["to_headline"],
                 "avatar_path": conn["to_avatar_path"],
             }
+            from_me = True
         else:
+            other_handle = conn["from_handle"]
             other = {
                 "handle": conn["from_handle"],
                 "first_name": conn["from_first_name"],
@@ -622,17 +675,34 @@ async def get_user_connections(handle: str) -> list[dict]:
                 "headline": conn["from_headline"],
                 "avatar_path": conn["from_avatar_path"],
             }
+            from_me = False
 
-        avatar_path = other["avatar_path"]
-        results.append({
+        # Create entry for this user if not exists
+        if other_handle not in grouped:
+            avatar_path = other["avatar_path"]
+            grouped[other_handle] = {
+                "handle": other_handle,
+                "name": _format_user_name(other),
+                "headline": other["headline"],
+                "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
+                "claims": [],
+                "max_power": conn["power"],  # Track highest power for sorting
+            }
+
+        # Add this claim
+        grouped[other_handle]["claims"].append({
             "id": conn["id"],
-            "handle": other["handle"],
-            "name": _format_user_name(other),
-            "headline": other["headline"],
-            "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
             "claim": conn["claim"],
+            "from_me": from_me,
             "created_at": conn["created_at"].isoformat() if conn["created_at"] else None,
         })
+
+    # Convert to list, sorted by max_power (highest first)
+    results = sorted(grouped.values(), key=lambda x: x["max_power"], reverse=True)
+
+    # Remove max_power from output (internal only)
+    for r in results:
+        del r["max_power"]
 
     return results
 
@@ -835,7 +905,10 @@ async def get_connection_status(
     handle: str,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Get connection status between current user and another user."""
+    """
+    Get aggregate connection status between current user and another user.
+    Supports multiple claims per pair.
+    """
     user_id = current_user["id"]
 
     target = await database.fetch_one(
@@ -850,29 +923,54 @@ async def get_connection_status(
     if user_id == target_id:
         return {"status": "self"}
 
-    conn = await database.fetch_one(
+    # Get all claims between these users (both directions)
+    all_claims = await database.fetch_all(
         """
-        SELECT id, from_user_id, to_user_id, status FROM connections
+        SELECT id, from_user_id, to_user_id, claim, status, created_at
+        FROM connections
         WHERE (from_user_id = :user_id AND to_user_id = :target_id)
            OR (from_user_id = :target_id AND to_user_id = :user_id)
+        ORDER BY created_at DESC
         """,
         {"user_id": user_id, "target_id": target_id},
     )
 
-    if conn is None:
-        return {"status": "none"}
+    # Check if connected (any confirmed claim in either direction)
+    is_connected = any(c["status"] == "confirmed" for c in all_claims)
 
-    if conn["status"] == "confirmed":
-        return {"status": "connected", "connection_id": conn["id"]}
+    # Count claims I sent
+    my_claims = [c for c in all_claims if c["from_user_id"] == user_id]
+    pending_sent_count = sum(1 for c in my_claims if c["status"] in ("pending", "ignored"))
+    confirmed_sent_count = sum(1 for c in my_claims if c["status"] == "confirmed")
 
-    if conn["status"] == "pending":
-        if conn["from_user_id"] == user_id:
-            return {"status": "pending_sent", "connection_id": conn["id"]}
-        return {"status": "pending_received", "connection_id": conn["id"]}
+    # Get claims they sent me that are pending (not ignored - those are hidden)
+    pending_received = [
+        {
+            "id": c["id"],
+            "claim": c["claim"],
+            "created_at": c["created_at"].isoformat() if c["created_at"] else None,
+        }
+        for c in all_claims
+        if c["from_user_id"] == target_id and c["status"] == "pending"
+    ]
 
-    if conn["status"] == "ignored":
-        if conn["from_user_id"] == user_id:
-            return {"status": "ignored_by_them", "connection_id": conn["id"]}
-        return {"status": "ignored_by_me", "connection_id": conn["id"]}
+    # Check rate limit (claims today to this target)
+    claims_today_result = await database.fetch_one(
+        """
+        SELECT COUNT(*) as count FROM connection_claims_log
+        WHERE from_user_id = :from_id AND to_user_id = :to_id
+          AND created_at > NOW() - INTERVAL '1 day'
+        """,
+        {"from_id": user_id, "to_id": target_id},
+    )
+    claims_today = claims_today_result["count"] if claims_today_result else 0
+    can_send_more = claims_today < 3
 
-    return {"status": "unknown"}
+    return {
+        "is_connected": is_connected,
+        "pending_sent_count": pending_sent_count,
+        "confirmed_sent_count": confirmed_sent_count,
+        "claims_today": claims_today,
+        "can_send_more": can_send_more,
+        "pending_received": pending_received,
+    }
