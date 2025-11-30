@@ -179,6 +179,7 @@
     let currentOtherName = null;
     let currentFilter = 'important';
     let conversationState = null;  // Stores is_connected, pending_claim_from_me, pending_claim_from_them
+    let pollingInterval = null;
 
     async function init() {
         const token = localStorage.getItem('token');
@@ -317,6 +318,9 @@
             // Refresh conversations to update unread counts
             await loadConversations();
             await updateHeaderBadge();
+
+            // Start polling for updates
+            startPolling();
         } catch (e) {
             console.error('Failed to load conversation:', e);
         }
@@ -709,6 +713,8 @@
 
     function closeChat() {
         currentOtherHandle = null;
+        stopPolling();
+
         document.getElementById('conversations-panel').classList.remove('hidden', 'sm:flex');
         document.getElementById('conversations-panel').classList.add('flex');
         document.getElementById('chat-panel').classList.add('hidden');
@@ -721,6 +727,63 @@
         document.getElementById('chat-input-container').classList.add('hidden');
 
         history.replaceState(null, '', '/messages');
+    }
+
+    function startPolling() {
+        stopPolling();
+        pollingInterval = setInterval(async () => {
+            if (currentOtherHandle) {
+                await refreshCurrentConversation();
+            }
+        }, 60000); // Poll every 60 seconds
+    }
+
+    function stopPolling() {
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+    }
+
+    async function refreshCurrentConversation() {
+        if (!currentOtherHandle) return;
+
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch(`/api/messages/with/${encodeURIComponent(currentOtherHandle)}/messages`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) return;
+
+            const data = await response.json();
+            conversationState = {
+                is_connected: data.is_connected,
+                pending_claim_from_them: data.pending_claim_from_them,
+                pending_claim_from_me: conversationState?.pending_claim_from_me || false
+            };
+
+            // Update messages without scroll jump if user hasn't scrolled
+            const messagesContainer = document.getElementById('chat-messages');
+            const wasAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 50;
+
+            if (data.messages.length === 0) {
+                messagesContainer.innerHTML = '<p class="text-center text-gray-500 py-8">Start a conversation</p>';
+            } else {
+                messagesContainer.innerHTML = data.messages.map(msg => renderMessage(msg, data.other_user)).join('');
+                if (wasAtBottom) {
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+            }
+
+            // Update input state in case connection status changed
+            updateInputState(conversationState);
+
+            // Refresh sidebar and badges
+            await loadConversations();
+            await updateHeaderBadge();
+        } catch (e) {
+            console.error('Failed to refresh conversation:', e);
+        }
     }
 
     async function updateHeaderBadge() {
