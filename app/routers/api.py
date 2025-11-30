@@ -329,6 +329,51 @@ async def delete_my_cover(
     return {"message": "Cover deleted"}
 
 
+@router.get("/search")
+async def search_users(q: str) -> list[dict]:
+    """Search users by name, handle, headline, or skills."""
+    if len(q) < 2:
+        return []
+
+    q_lower = q.lower()
+    users = await database.fetch_all(
+        """
+        SELECT handle, first_name, middle_name, last_name, headline, avatar_path
+        FROM users
+        WHERE verified = TRUE
+          AND (
+            handle ILIKE '%' || :q || '%'
+            OR first_name ILIKE '%' || :q || '%'
+            OR last_name ILIKE '%' || :q || '%'
+            OR headline ILIKE '%' || :q || '%'
+            OR :q_lower = ANY(SELECT LOWER(unnest(skills)))
+          )
+        LIMIT 10
+        """,
+        {"q": q, "q_lower": q_lower},
+    )
+
+    results = []
+    for user in users:
+        first_name = user["first_name"] or ""
+        middle_name = user["middle_name"]
+        last_name = user["last_name"] or ""
+        full_name = (
+            f"{first_name} {middle_name} {last_name}".replace("  ", " ").strip()
+            if middle_name
+            else f"{first_name} {last_name}".strip()
+        )
+        avatar_path = user["avatar_path"]
+        results.append({
+            "handle": user["handle"],
+            "name": full_name,
+            "headline": user["headline"],
+            "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
+        })
+
+    return results
+
+
 @router.get("/u/{handle}")
 async def get_public_profile(handle: str) -> dict:
     """Get public profile by handle."""
