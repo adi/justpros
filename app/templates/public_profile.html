@@ -8,26 +8,6 @@
 {% block twitter_description %}{{ headline or "Professional on JustPros" }}{% endblock %}
 {% if og_image %}{% block twitter_image %}{{ og_image }}{% endblock %}{% endif %}
 {% block content %}
-<style>
-    #body-editor .tiptap {
-        min-height: 80px;
-        padding: 0.5rem 0.75rem;
-        border: 1px solid #d1d5db;
-        border-radius: 0.375rem;
-        font-size: 0.875rem;
-        line-height: 1.5;
-    }
-    #body-editor .tiptap:focus {
-        outline: none;
-        border-color: #1a79e5;
-        box-shadow: 0 0 0 2px rgba(26, 121, 229, 0.1);
-    }
-    #body-editor .tiptap p { margin: 0; }
-    #body-editor .tiptap p + p { margin-top: 0.5rem; }
-    .editor-toolbar button.is-active {
-        background-color: #e5e7eb;
-    }
-</style>
 <div class="mt-2 w-full">
     <div class="bg-white rounded-lg shadow overflow-hidden">
         <!-- Cover Image -->
@@ -48,193 +28,103 @@
                         <h1 id="profile-name" class="text-2xl font-bold text-gray-900"></h1>
                         <p id="profile-headline" class="text-gray-600 mt-1"></p>
                     </div>
-                    <button id="connect-btn" class="hidden px-4 py-2 rounded-md text-sm font-medium flex-shrink-0">
-                        Connect
-                    </button>
+                    <div class="flex gap-2 flex-shrink-0">
+                        <a id="message-btn" href="#" class="hidden px-4 py-2 border border-brand-blue text-brand-blue rounded-md text-sm font-medium hover:bg-blue-50">
+                            Message
+                        </a>
+                        <button id="connect-btn" class="hidden px-4 py-2 bg-brand-blue text-white rounded-md text-sm font-medium hover:opacity-90">
+                            Connect
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Skills -->
                 <div id="profile-skills" class="flex flex-wrap gap-2 mt-4"></div>
+
+                <!-- Connection status badge -->
+                <div id="connection-status" class="hidden mt-4">
+                    <span class="inline-flex items-center gap-1 text-sm text-green-700 bg-green-100 px-3 py-1 rounded-full">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Connected
+                    </span>
+                </div>
             </div>
         </div>
-    </div>
-
-    <!-- Connections Section -->
-    <div id="connections-section" class="hidden bg-white rounded-lg shadow mt-4 p-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Connections</h2>
-        <div id="connections-list" class="space-y-3"></div>
-        <p id="no-connections" class="hidden text-gray-500 text-sm">No connections yet</p>
     </div>
 </div>
 
-<!-- Compose Overlay (Gmail-style) -->
-<div id="compose-overlay" class="hidden fixed bottom-4 right-4 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-t-lg shadow-2xl z-50 flex flex-col" style="max-height: 70vh;">
-    <!-- Header -->
-    <div class="flex items-center justify-between px-4 py-2 bg-gray-800 text-white rounded-t-lg cursor-move" id="compose-header">
-        <span class="font-medium text-sm">Connect with <span id="compose-name"></span></span>
-        <div class="flex items-center gap-1">
-            <button onclick="minimizeCompose()" class="p-1 hover:bg-gray-700 rounded" title="Minimize">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
-            </button>
-            <button onclick="closeCompose()" class="p-1 hover:bg-gray-700 rounded" title="Close">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-        </div>
-    </div>
-
-    <!-- Body -->
-    <div id="compose-body" class="flex-1 overflow-y-auto p-4">
-        <!-- To field -->
-        <div class="flex items-center gap-2 pb-2 border-b border-gray-200 mb-3">
-            <span class="text-sm text-gray-500">To:</span>
-            <div class="flex items-center gap-2">
-                <img id="compose-avatar" src="/static/default-avatar.svg" class="w-6 h-6 rounded-full object-cover">
-                <span id="compose-handle" class="text-sm font-medium"></span>
-            </div>
-        </div>
-
-        <!-- Subject field -->
-        <div class="mb-3">
-            <label class="block text-sm text-gray-600 mb-1">How do you know this person?</label>
-            <!-- Preset buttons for subject -->
-            <div class="flex flex-wrap gap-2 mb-2">
-                <button onclick="selectPreset('Worked together')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Worked together</button>
-                <button onclick="selectPreset('Was my manager')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Was my manager</button>
-                <button onclick="selectPreset('Was my report')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Was my report</button>
-                <button onclick="selectPreset('Collaborated on a project')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Collaborated on a project</button>
-                <button onclick="selectPreset('Met at an event')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Met at an event</button>
-                <button onclick="selectPreset('Classmates')" class="preset-btn px-3 py-1.5 border border-gray-300 rounded-full text-sm hover:bg-gray-50">Classmates</button>
-            </div>
-            <input type="text" id="subject-input" placeholder="Or type your own..." maxlength="100"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue text-sm">
-            <p class="text-xs text-gray-500 mt-1"><span id="subject-length">0</span>/100</p>
-        </div>
-
-        <!-- Body field with Tiptap editor (optional) -->
-        <div class="mb-3">
-            <label class="block text-sm text-gray-600 mb-1">Add details (optional)</label>
-            <!-- Minimal toolbar -->
-            <div id="editor-toolbar" class="editor-toolbar flex gap-1 mb-2 text-gray-500 text-sm">
-                <button type="button" id="btn-bold" class="p-1.5 hover:bg-gray-100 rounded font-bold" title="Bold (Ctrl+B)">B</button>
-                <button type="button" id="btn-italic" class="p-1.5 hover:bg-gray-100 rounded italic" title="Italic (Ctrl+I)">I</button>
-            </div>
-            <div id="body-editor"></div>
-            <p class="text-xs text-gray-500 mt-1"><span id="body-length">0</span>/2000</p>
-        </div>
-
-        <div id="compose-error" class="hidden text-red-600 text-sm mb-3"></div>
-    </div>
-
-    <!-- Footer -->
-    <div class="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-        <button onclick="submitConnection()" id="submit-connect-btn" class="px-4 py-2 bg-brand-blue text-white rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50" disabled>
-            Send
-        </button>
-        <button onclick="closeCompose()" class="text-gray-500 hover:text-gray-700 text-sm">Discard</button>
-    </div>
-</div>
-
-<!-- Minimized compose bar -->
-<div id="compose-minimized" class="hidden fixed bottom-0 right-4 bg-gray-800 text-white rounded-t-lg shadow-lg z-50 cursor-pointer" onclick="restoreCompose()">
-    <div class="px-4 py-2 flex items-center gap-3">
-        <span class="text-sm font-medium">Connect with <span id="minimized-name"></span></span>
-        <button onclick="event.stopPropagation(); closeCompose()" class="p-1 hover:bg-gray-700 rounded">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-    </div>
-</div>
-
-<!-- Respond Modal (for incoming requests) -->
-<div id="respond-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
-        <div class="p-6">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold text-gray-900">Connection Request</h2>
-                <button onclick="closeRespondModal()" class="text-gray-400 hover:text-gray-600">
+<!-- Claim Modal -->
+<div id="claim-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full">
+        <div class="p-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">Connect with <span id="modal-name"></span></h2>
+                <button onclick="hideClaimModal()" class="text-gray-500 hover:text-gray-700">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
                 </button>
             </div>
-            <p class="text-gray-600 mb-2"><span id="respond-name" class="font-medium"></span> wants to connect:</p>
-            <p id="respond-subject" class="text-gray-900 font-medium mb-2"></p>
-            <div id="respond-body" class="text-gray-700 bg-gray-100 p-3 rounded-md mb-4 text-sm hidden"></div>
+        </div>
+        <form id="claim-form" class="p-4">
+            <div class="mb-4">
+                <label id="claim-label" class="block text-sm font-medium text-gray-700 mb-1">Tell them why you should be connected</label>
+                <textarea id="claim-content" rows="3" maxlength="500" required
+                    placeholder="e.g., We worked together at Acme Corp from 2020-2022"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"></textarea>
+                <p class="text-xs text-gray-500 mt-1"><span id="claim-chars">0</span>/500 characters</p>
+            </div>
+            <div id="claim-error" class="hidden text-red-600 text-sm mb-3"></div>
+            <div class="flex justify-end gap-3">
+                <button type="button" onclick="hideClaimModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Cancel
+                </button>
+                <button type="submit" id="claim-submit-btn" class="px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 disabled:opacity-50" disabled>
+                    Send Request
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
-            <div id="respond-error" class="hidden text-red-600 text-sm mb-4"></div>
-
+<!-- Pending Claim Modal (for incoming requests) -->
+<div id="pending-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-900">Connection Request</h2>
+                <button onclick="hidePendingModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <p class="text-gray-600 mb-2"><span id="pending-name" class="font-medium"></span> wants to connect:</p>
+            <div class="bg-gray-50 p-3 rounded-md mb-4">
+                <p id="pending-content" class="text-gray-700 whitespace-pre-wrap"></p>
+            </div>
+            <div id="pending-error" class="hidden text-red-600 text-sm mb-4"></div>
             <div class="flex gap-3">
-                <button onclick="ignoreConnection()" class="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">Ignore</button>
-                <button onclick="confirmConnection()" class="flex-1 px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90">Confirm</button>
+                <button onclick="ignorePendingClaim()" class="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">Ignore</button>
+                <button onclick="confirmPendingClaim()" class="flex-1 px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90">Confirm</button>
             </div>
         </div>
     </div>
 </div>
 
-<script type="module">
-    import { Editor } from 'https://esm.sh/@tiptap/core@2.11.5';
-    import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.11.5';
-
+<script>
     const handle = '{{ handle }}';
     let profileName = '';
-    let statusData = null;  // stores full status response
-    let currentPendingClaim = null;  // Currently selected pending claim for respond modal
-    let bodyEditor = null;  // Tiptap editor instance for body
+    let conversationState = null;
 
-    // Initialize Tiptap editor for body
-    function initEditor() {
-        bodyEditor = new Editor({
-            element: document.querySelector('#body-editor'),
-            extensions: [StarterKit],
-            content: '',
-            editorProps: {
-                attributes: {
-                    class: 'tiptap prose prose-sm max-w-none focus:outline-none',
-                },
-            },
-            onUpdate: ({ editor }) => {
-                const len = editor.getText().trim().length;
-                document.getElementById('body-length').textContent = len;
-                updateSubmitButtonState();
-                updateToolbarState();
-            },
-            onSelectionUpdate: () => {
-                updateToolbarState();
-            },
-        });
-
-        // Toolbar button handlers
-        document.getElementById('btn-bold').addEventListener('click', () => {
-            bodyEditor.chain().focus().toggleBold().run();
-        });
-        document.getElementById('btn-italic').addEventListener('click', () => {
-            bodyEditor.chain().focus().toggleItalic().run();
-        });
-
-        // Subject input event listener
-        document.getElementById('subject-input').addEventListener('input', (e) => {
-            const len = e.target.value.length;
-            document.getElementById('subject-length').textContent = len;
-            updateSubmitButtonState();
-
-            // Clear preset highlights when typing custom
-            document.querySelectorAll('.preset-btn').forEach(b => {
-                if (b.textContent !== e.target.value) {
-                    b.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue');
-                }
-            });
-        });
-    }
-
-    function updateSubmitButtonState() {
-        const subjectLen = document.getElementById('subject-input').value.trim().length;
-        const bodyLen = bodyEditor ? bodyEditor.getText().trim().length : 0;
-        document.getElementById('submit-connect-btn').disabled = subjectLen < 3 || subjectLen > 100 || bodyLen > 2000;
-    }
-
-    function updateToolbarState() {
-        if (!bodyEditor) return;
-        document.getElementById('btn-bold').classList.toggle('is-active', bodyEditor.isActive('bold'));
-        document.getElementById('btn-italic').classList.toggle('is-active', bodyEditor.isActive('italic'));
+    function parseJwt(token) {
+        try {
+            return JSON.parse(atob(token.split('.')[1]));
+        } catch {
+            return null;
+        }
     }
 
     async function loadPublicProfile() {
@@ -256,6 +146,8 @@
 
             document.getElementById('profile-name').textContent = profileName;
             document.getElementById('profile-headline').textContent = data.headline || '';
+            document.getElementById('modal-name').textContent = profileName;
+            document.getElementById('pending-name').textContent = profileName;
 
             if (data.avatar_url) {
                 document.getElementById('avatar-image').src = data.avatar_url;
@@ -276,108 +168,14 @@
                 document.title = `${data.name} | JustPros`;
             }
 
-            // Load button state first (needed to check if connected)
-            await updateConnectButton();
-
-            // Only load connections if viewer is connected to profile owner
-            if (statusData && statusData.is_connected) {
-                await loadConnections();
-            }
+            // Load connection buttons
+            await updateButtons();
         } catch (error) {
             console.error('Failed to load profile:', error);
         }
     }
 
-    async function loadConnections() {
-        const token = localStorage.getItem('token');
-        try {
-            const response = await fetch(`/api/connections/u/${encodeURIComponent(handle)}`);
-            if (!response.ok) return;
-
-            const connections = await response.json();
-            const section = document.getElementById('connections-section');
-            const list = document.getElementById('connections-list');
-            const noConnections = document.getElementById('no-connections');
-
-            section.classList.remove('hidden');
-
-            if (connections.length === 0) {
-                noConnections.classList.remove('hidden');
-                return;
-            }
-
-            // Build connection cards with claims and vote buttons
-            list.innerHTML = connections.map(conn => `
-                <div class="p-2 -mx-2 rounded-lg hover:bg-gray-50">
-                    <a href="/u/${conn.handle}" class="flex items-start gap-3">
-                        <img src="${conn.avatar_url || '/static/default-avatar.svg'}" alt=""
-                            class="w-10 h-10 rounded-full object-cover bg-gray-200 flex-shrink-0">
-                        <div class="flex-1 min-w-0">
-                            <div class="font-medium text-gray-900 truncate">${conn.name || conn.handle}</div>
-                        </div>
-                    </a>
-                    <div class="ml-13 mt-2 space-y-2">
-                        ${conn.claims.map(c => `
-                            <div class="flex items-center gap-2 text-sm">
-                                <span class="text-gray-500 italic truncate flex-1">"${c.subject}"</span>
-                                <div class="flex gap-1 flex-shrink-0" data-claim-id="${c.id}">
-                                    <button onclick="voteClaim(${c.id}, 1)" class="vote-btn vote-up p-1 rounded hover:bg-green-100 text-gray-400 hover:text-green-600" title="Confirm this claim">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
-                                    </button>
-                                    <button onclick="voteClaim(${c.id}, -1)" class="vote-btn vote-down p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600" title="Dispute this claim">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                                    </button>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `).join('');
-        } catch (e) {
-            console.error('Failed to load connections:', e);
-        }
-    }
-
-    async function voteClaim(claimId, vote) {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-
-        try {
-            const response = await fetch(`/api/connections/${claimId}/vote`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ vote })
-            });
-
-            if (!response.ok) {
-                const data = await response.json();
-                alert(data.detail || 'Cannot vote on this claim');
-                return;
-            }
-
-            // Update button styles to show vote was recorded
-            const container = document.querySelector(`[data-claim-id="${claimId}"]`);
-            if (container) {
-                container.querySelectorAll('.vote-btn').forEach(btn => {
-                    btn.classList.remove('text-green-600', 'text-red-600', 'bg-green-100', 'bg-red-100');
-                    btn.classList.add('text-gray-400');
-                });
-                const activeBtn = vote === 1 ? container.querySelector('.vote-up') : container.querySelector('.vote-down');
-                if (activeBtn) {
-                    activeBtn.classList.remove('text-gray-400');
-                    activeBtn.classList.add(vote === 1 ? 'text-green-600' : 'text-red-600');
-                    activeBtn.classList.add(vote === 1 ? 'bg-green-100' : 'bg-red-100');
-                }
-            }
-        } catch (e) {
-            console.error('Failed to vote:', e);
-        }
-    }
-
-    async function updateConnectButton() {
+    async function updateButtons() {
         const token = localStorage.getItem('token');
         if (!token) return;
 
@@ -394,130 +192,87 @@
             const me = await meResponse.json();
             if (me.handle === handle) return; // Own profile
 
-            // Get connection status (new multi-claim format)
-            const statusResponse = await fetch(`/api/connections/status/${encodeURIComponent(handle)}`, {
+            // Get conversation state
+            const response = await fetch(`/api/messages/with/${encodeURIComponent(handle)}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!statusResponse.ok) return;
+            if (!response.ok) return;
 
-            statusData = await statusResponse.json();
+            conversationState = await response.json();
 
-            const btn = document.getElementById('connect-btn');
+            const connectBtn = document.getElementById('connect-btn');
+            const messageBtn = document.getElementById('message-btn');
+            const statusBadge = document.getElementById('connection-status');
 
-            // Multi-claim button logic - only show if can send more
-            if (statusData.can_send_more) {
-                btn.textContent = statusData.is_connected ? '+ Add Claim' : 'Connect';
-                btn.className = 'bg-brand-blue text-white px-4 py-2 rounded-md text-sm font-medium flex-shrink-0 hover:opacity-90';
-                btn.onclick = openCompose;
-                btn.classList.remove('hidden');
+            if (conversationState.is_connected) {
+                // Connected - show Message button and status badge
+                messageBtn.href = `/messages/${handle}`;
+                messageBtn.classList.remove('hidden');
+                statusBadge.classList.remove('hidden');
+                connectBtn.classList.add('hidden');
+            } else if (conversationState.pending_claim_from_them) {
+                // They sent me a claim - show Respond button
+                connectBtn.textContent = 'Respond';
+                connectBtn.onclick = showPendingModal;
+                connectBtn.classList.remove('hidden');
+            } else if (conversationState.pending_claim_from_me) {
+                // I sent them a claim - show pending status
+                connectBtn.textContent = 'Pending...';
+                connectBtn.disabled = true;
+                connectBtn.className = 'px-4 py-2 bg-gray-100 text-gray-500 rounded-md text-sm font-medium cursor-not-allowed';
+                connectBtn.classList.remove('hidden');
             } else {
-                // Rate limited - hide the button entirely
-                btn.classList.add('hidden');
-            }
-
-            // Show respond button if they have pending claims to me
-            if (statusData.pending_received && statusData.pending_received.length > 0) {
-                showRespondButton(statusData.pending_received.length);
+                // No connection - show Connect button
+                connectBtn.textContent = 'Connect';
+                connectBtn.onclick = showClaimModal;
+                connectBtn.classList.remove('hidden');
             }
         } catch (e) {
             console.error('Failed to check connection status:', e);
         }
     }
 
-    function showRespondButton(count) {
-        // Add a respond button/badge next to the connect button
-        let respondBtn = document.getElementById('respond-btn');
-        if (!respondBtn) {
-            respondBtn = document.createElement('button');
-            respondBtn.id = 'respond-btn';
-            const connectBtn = document.getElementById('connect-btn');
-            connectBtn.parentNode.insertBefore(respondBtn, connectBtn.nextSibling);
-        }
-        respondBtn.textContent = `Respond (${count})`;
-        respondBtn.className = 'bg-brand-pink text-white px-4 py-2 rounded-md text-sm font-medium flex-shrink-0 hover:opacity-90 ml-2';
-        respondBtn.onclick = openRespondModal;
+    // Claim modal functions
+    function showClaimModal() {
+        document.getElementById('claim-label').textContent = `Tell ${profileName} why you should be connected`;
+        document.getElementById('claim-modal').classList.remove('hidden');
+        document.getElementById('claim-content').focus();
     }
 
-    // Compose overlay functions
-    let composeAvatarUrl = null;
-
-    function openCompose() {
-        document.getElementById('compose-name').textContent = profileName;
-        document.getElementById('minimized-name').textContent = profileName;
-        document.getElementById('compose-handle').textContent = profileName;
-        document.getElementById('compose-avatar').src = document.getElementById('avatar-image').src;
-        document.getElementById('subject-input').value = '';
-        document.getElementById('subject-length').textContent = '0';
-        if (bodyEditor) {
-            bodyEditor.commands.clearContent();
-        }
-        document.getElementById('body-length').textContent = '0';
-        document.getElementById('compose-error').classList.add('hidden');
-        document.getElementById('submit-connect-btn').disabled = true;
-        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue'));
-        document.getElementById('compose-overlay').classList.remove('hidden');
-        document.getElementById('compose-minimized').classList.add('hidden');
-        document.getElementById('subject-input').focus();
+    function hideClaimModal() {
+        document.getElementById('claim-modal').classList.add('hidden');
+        document.getElementById('claim-content').value = '';
+        document.getElementById('claim-chars').textContent = '0';
+        document.getElementById('claim-error').classList.add('hidden');
+        document.getElementById('claim-submit-btn').disabled = true;
     }
 
-    function closeCompose() {
-        document.getElementById('compose-overlay').classList.add('hidden');
-        document.getElementById('compose-minimized').classList.add('hidden');
-    }
+    document.getElementById('claim-content').addEventListener('input', (e) => {
+        const len = e.target.value.trim().length;
+        document.getElementById('claim-chars').textContent = e.target.value.length;
+        document.getElementById('claim-submit-btn').disabled = len < 1;
+    });
 
-    function minimizeCompose() {
-        document.getElementById('compose-overlay').classList.add('hidden');
-        document.getElementById('compose-minimized').classList.remove('hidden');
-    }
+    document.getElementById('claim-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const content = document.getElementById('claim-content').value.trim();
+        if (!content) return;
 
-    function restoreCompose() {
-        document.getElementById('compose-overlay').classList.remove('hidden');
-        document.getElementById('compose-minimized').classList.add('hidden');
-    }
-
-    function selectPreset(text) {
-        document.getElementById('subject-input').value = text;
-        document.getElementById('subject-length').textContent = text.length;
-        updateSubmitButtonState();
-
-        // Highlight selected preset
-        document.querySelectorAll('.preset-btn').forEach(b => {
-            if (b.textContent === text) {
-                b.classList.add('bg-brand-blue', 'text-white', 'border-brand-blue');
-            } else {
-                b.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue');
-            }
-        });
-    }
-    // Expose selectPreset globally for onclick handlers
-    window.selectPreset = selectPreset;
-
-    async function submitConnection() {
         const token = localStorage.getItem('token');
-        const subject = document.getElementById('subject-input').value.trim();
-        // Use getHTML() to preserve rich text formatting, but check if there's actual content
-        const bodyText = bodyEditor ? bodyEditor.getText().trim() : '';
-        const bodyHtml = bodyEditor && bodyText ? bodyEditor.getHTML() : null;
-        const errorEl = document.getElementById('compose-error');
-        const submitBtn = document.getElementById('submit-connect-btn');
-
-        if (subject.length < 3) {
-            errorEl.textContent = 'Subject must be at least 3 characters';
-            errorEl.classList.remove('hidden');
-            return;
-        }
+        const errorEl = document.getElementById('claim-error');
+        const submitBtn = document.getElementById('claim-submit-btn');
 
         submitBtn.disabled = true;
         submitBtn.textContent = 'Sending...';
 
         try {
-            const response = await fetch('/api/connections', {
+            const response = await fetch(`/api/messages/to/${encodeURIComponent(handle)}/claim`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ to_handle: handle, subject, body: bodyHtml })
+                body: JSON.stringify({ content })
             });
 
             if (!response.ok) {
@@ -525,51 +280,50 @@
                 throw new Error(data.detail || 'Failed to send connection request');
             }
 
-            closeCompose();
-            await updateConnectButton();
+            hideClaimModal();
+            // Redirect to messages to see the conversation
+            window.location.href = `/messages/${handle}`;
         } catch (e) {
             errorEl.textContent = e.message;
             errorEl.classList.remove('hidden');
             submitBtn.disabled = false;
-            submitBtn.textContent = 'Send';
+            submitBtn.textContent = 'Send Request';
         }
-    }
+    });
 
-    // Respond Modal functions
-    function openRespondModal() {
-        // Use pending claims from statusData (already fetched)
-        if (!statusData || !statusData.pending_received || statusData.pending_received.length === 0) {
-            return;
-        }
-
-        // Show the first pending claim (user can confirm/ignore each one)
-        currentPendingClaim = statusData.pending_received[0];
-        document.getElementById('respond-name').textContent = profileName;
-        document.getElementById('respond-subject').textContent = currentPendingClaim.subject;
-        const bodyEl = document.getElementById('respond-body');
-        if (currentPendingClaim.body) {
-            bodyEl.innerHTML = currentPendingClaim.body;
-            bodyEl.classList.remove('hidden');
-        } else {
-            bodyEl.classList.add('hidden');
-        }
-        document.getElementById('respond-error').classList.add('hidden');
-        document.getElementById('respond-modal').classList.remove('hidden');
-    }
-
-    function closeRespondModal() {
-        document.getElementById('respond-modal').classList.add('hidden');
-        currentPendingClaim = null;
-    }
-
-    async function confirmConnection() {
-        if (!currentPendingClaim) return;
-
+    // Pending claim modal functions
+    async function showPendingModal() {
+        // Load the pending claim content
         const token = localStorage.getItem('token');
-        const errorEl = document.getElementById('respond-error');
+        try {
+            const response = await fetch(`/api/messages/with/${encodeURIComponent(handle)}/messages`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) return;
+
+            const data = await response.json();
+            // Find the pending claim from them
+            const pendingClaim = data.messages.find(m => m.kind === 'claim' && !m.is_mine);
+            if (pendingClaim) {
+                document.getElementById('pending-content').textContent = pendingClaim.content;
+                document.getElementById('pending-modal').classList.remove('hidden');
+            }
+        } catch (e) {
+            console.error('Failed to load pending claim:', e);
+        }
+    }
+
+    function hidePendingModal() {
+        document.getElementById('pending-modal').classList.add('hidden');
+        document.getElementById('pending-error').classList.add('hidden');
+    }
+
+    async function confirmPendingClaim() {
+        const token = localStorage.getItem('token');
+        const errorEl = document.getElementById('pending-error');
 
         try {
-            const response = await fetch(`/api/connections/${currentPendingClaim.id}/confirm`, {
+            const response = await fetch(`/api/messages/to/${encodeURIComponent(handle)}/confirm`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -579,27 +333,21 @@
                 throw new Error(data.detail || 'Failed to confirm connection');
             }
 
-            closeRespondModal();
-            await updateConnectButton();
-            // If now connected, load connections
-            if (statusData && statusData.is_connected) {
-                await loadConnections();
-            }
+            hidePendingModal();
+            await updateButtons();
         } catch (e) {
             errorEl.textContent = e.message;
             errorEl.classList.remove('hidden');
         }
     }
 
-    async function ignoreConnection() {
-        if (!currentPendingClaim) return;
-
+    async function ignorePendingClaim() {
         const token = localStorage.getItem('token');
-        const errorEl = document.getElementById('respond-error');
+        const errorEl = document.getElementById('pending-error');
 
         try {
-            const response = await fetch(`/api/connections/${currentPendingClaim.id}/ignore`, {
-                method: 'POST',
+            const response = await fetch(`/api/messages/with/${encodeURIComponent(handle)}`, {
+                method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -608,8 +356,8 @@
                 throw new Error(data.detail || 'Failed to ignore connection');
             }
 
-            closeRespondModal();
-            await updateConnectButton();
+            hidePendingModal();
+            await updateButtons();
         } catch (e) {
             errorEl.textContent = e.message;
             errorEl.classList.remove('hidden');
@@ -619,29 +367,19 @@
     // Close modals on escape key
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            closeCompose();
-            closeRespondModal();
+            hideClaimModal();
+            hidePendingModal();
         }
     });
 
-    // Close respond modal on backdrop click
-    document.getElementById('respond-modal').addEventListener('click', (e) => {
-        if (e.target === e.currentTarget) closeRespondModal();
+    // Close modals on backdrop click
+    document.getElementById('claim-modal').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) hideClaimModal();
+    });
+    document.getElementById('pending-modal').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) hidePendingModal();
     });
 
-    // Expose functions to global scope for onclick handlers
-    window.minimizeCompose = minimizeCompose;
-    window.closeCompose = closeCompose;
-    window.restoreCompose = restoreCompose;
-    window.submitConnection = submitConnection;
-    window.openRespondModal = openRespondModal;
-    window.closeRespondModal = closeRespondModal;
-    window.confirmConnection = confirmConnection;
-    window.ignoreConnection = ignoreConnection;
-    window.voteClaim = voteClaim;
-
-    // Initialize editor and load profile
-    initEditor();
     loadPublicProfile();
 </script>
 {% endblock %}

@@ -8,8 +8,24 @@ from app.storage import get_avatar_url
 router = APIRouter(prefix="/api/messages", tags=["messages"])
 
 
+# --- Pydantic Models ---
+
+
+class ClaimCreate(BaseModel):
+    content: str
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 1 or len(v) > 500:
+            raise ValueError("Claim must be 1-500 characters")
+        return v
+
+
 class MessageCreate(BaseModel):
     content: str
+    reply_to: int | None = None
 
     @field_validator("content")
     @classmethod
@@ -18,6 +34,21 @@ class MessageCreate(BaseModel):
         if len(v) < 1 or len(v) > 2000:
             raise ValueError("Message must be 1-2000 characters")
         return v
+
+
+class AbuseReportCreate(BaseModel):
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 10 or len(v) > 1000:
+            raise ValueError("Reason must be 10-1000 characters")
+        return v
+
+
+# --- Helper Functions ---
 
 
 def _format_user_name(user: dict) -> str:
@@ -30,174 +61,298 @@ def _format_user_name(user: dict) -> str:
     return f"{first_name} {last_name}".strip()
 
 
-async def _get_or_create_conversation(user1_id: int, user2_id: int) -> int:
-    """Get existing conversation or create new one. Returns conversation ID."""
-    # Ensure consistent ordering (user1_id < user2_id)
-    if user1_id > user2_id:
-        user1_id, user2_id = user2_id, user1_id
-
-    # Try to get existing
-    conv = await database.fetch_one(
+async def _get_user_by_handle(handle: str) -> dict | None:
+    """Get user by handle."""
+    return await database.fetch_one(
         """
-        SELECT id FROM conversations
-        WHERE user1_id = :u1 AND user2_id = :u2
+        SELECT id, handle, first_name, middle_name, last_name, headline, avatar_path
+        FROM users WHERE handle = :handle
         """,
-        {"u1": user1_id, "u2": user2_id},
+        {"handle": handle.lower()},
     )
 
-    if conv:
-        return conv["id"]
 
-    # Create new conversation
+async def _is_connected(user1_id: int, user2_id: int) -> bool:
+    """Check if two users are connected (confirm message exists between them)."""
     result = await database.fetch_one(
         """
-        INSERT INTO conversations (user1_id, user2_id)
-        VALUES (:u1, :u2)
-        RETURNING id
+        SELECT 1 FROM messages
+        WHERE kind = 'confirm'
+          AND ((sender_id = :u1 AND receiver_id = :u2)
+               OR (sender_id = :u2 AND receiver_id = :u1))
+        LIMIT 1
         """,
         {"u1": user1_id, "u2": user2_id},
     )
-    return result["id"]
+    return result is not None
 
 
-async def _can_message(from_user_id: int, to_user_id: int) -> tuple[bool, str]:
+async def _has_pending_claim(from_user_id: int, to_user_id: int) -> bool:
+    """Check if there's a pending claim (claim without confirm response)."""
+    # A claim is pending if:
+    # 1. There's a claim from from_user to to_user
+    # 2. There's no confirm from to_user to from_user after the claim
+    # 3. The receiver hasn't deleted the conversation (which acts as ignore)
+    claim = await database.fetch_one(
+        """
+        SELECT m.id, m.created_at FROM messages m
+        WHERE m.kind = 'claim'
+          AND m.sender_id = :from_id
+          AND m.receiver_id = :to_id
+          AND m.receiver_deleted IS NULL
+        ORDER BY m.created_at DESC
+        LIMIT 1
+        """,
+        {"from_id": from_user_id, "to_id": to_user_id},
+    )
+
+    if not claim:
+        return False
+
+    # Check if there's a confirm after this claim
+    confirm = await database.fetch_one(
+        """
+        SELECT 1 FROM messages
+        WHERE kind = 'confirm'
+          AND sender_id = :to_id
+          AND receiver_id = :from_id
+          AND created_at > :claim_time
+        LIMIT 1
+        """,
+        {"to_id": to_user_id, "from_id": from_user_id, "claim_time": claim["created_at"]},
+    )
+
+    return confirm is None
+
+
+async def _get_last_read_message_id(user_id: int, other_user_id: int) -> int | None:
+    """Get the last read message ID for a conversation.
+
+    Derives the conversation from the message's sender/receiver.
     """
-    Check if user can message another user.
-    Returns (allowed, reason).
+    result = await database.fetch_one(
+        """
+        SELECT cr.last_read_message_id
+        FROM conversation_reads cr
+        JOIN messages m ON m.id = cr.last_read_message_id
+        WHERE cr.user_id = :user_id
+          AND (
+              (m.sender_id = :user_id AND m.receiver_id = :other_user_id)
+              OR (m.sender_id = :other_user_id AND m.receiver_id = :user_id)
+          )
+        """,
+        {"user_id": user_id, "other_user_id": other_user_id},
+    )
+    return result["last_read_message_id"] if result else None
 
-    Rules:
-    - Can always message if connected (confirmed connection)
-    - Can send ONE message if connection is pending (as intro)
-    - Cannot message if no connection exists
+
+async def _update_last_read(user_id: int, other_user_id: int, message_id: int) -> None:
+    """Update the last read message ID for a conversation.
+
+    Since we don't store other_user_id, we need to:
+    1. Find existing read marker for this conversation (by joining to messages)
+    2. Delete it if exists
+    3. Insert new one
     """
-    # Check for confirmed connection
-    confirmed = await database.fetch_one(
+    # Delete existing read marker for this conversation
+    await database.execute(
         """
-        SELECT id FROM connections
-        WHERE status = 'confirmed'
-          AND ((from_user_id = :from_id AND to_user_id = :to_id)
-               OR (from_user_id = :to_id AND to_user_id = :from_id))
+        DELETE FROM conversation_reads
+        WHERE user_id = :user_id
+          AND last_read_message_id IN (
+              SELECT m.id FROM messages m
+              WHERE (m.sender_id = :user_id AND m.receiver_id = :other_user_id)
+                 OR (m.sender_id = :other_user_id AND m.receiver_id = :user_id)
+          )
         """,
-        {"from_id": from_user_id, "to_id": to_user_id},
+        {"user_id": user_id, "other_user_id": other_user_id},
     )
 
-    if confirmed:
-        return True, "connected"
-
-    # Check for pending connection FROM current user
-    pending_from_me = await database.fetch_one(
+    # Insert new read marker
+    await database.execute(
         """
-        SELECT id FROM connections
-        WHERE status = 'pending'
-          AND from_user_id = :from_id AND to_user_id = :to_id
+        INSERT INTO conversation_reads (user_id, last_read_message_id)
+        VALUES (:user_id, :message_id)
         """,
-        {"from_id": from_user_id, "to_id": to_user_id},
+        {"user_id": user_id, "message_id": message_id},
     )
 
-    if pending_from_me:
-        # Check if already sent a message in this conversation
-        # (only 1 intro message allowed while pending)
-        conv_id = await _get_conversation_id(from_user_id, to_user_id)
-        if conv_id:
-            msg_count = await database.fetch_one(
-                """
-                SELECT COUNT(*) as count FROM messages
-                WHERE conversation_id = :conv_id AND sender_id = :sender_id
-                """,
-                {"conv_id": conv_id, "sender_id": from_user_id},
-            )
-            if msg_count and msg_count["count"] > 0:
-                return False, "already_sent_intro"
-        return True, "pending_intro"
 
-    # Check for pending connection TO current user (they can respond)
-    pending_to_me = await database.fetch_one(
-        """
-        SELECT id FROM connections
-        WHERE status = 'pending'
-          AND from_user_id = :to_id AND to_user_id = :from_id
-        """,
-        {"from_id": from_user_id, "to_id": to_user_id},
-    )
-
-    if pending_to_me:
-        return True, "can_respond"
-
-    return False, "not_connected"
+def _format_other_user(user: dict) -> dict:
+    """Format user info for API response."""
+    avatar_path = user.get("avatar_path")
+    return {
+        "id": user["id"],
+        "handle": user["handle"],
+        "name": _format_user_name(user),
+        "headline": user.get("headline"),
+        "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
+    }
 
 
-async def _get_conversation_id(user1_id: int, user2_id: int) -> int | None:
-    """Get conversation ID if exists, None otherwise."""
-    if user1_id > user2_id:
-        user1_id, user2_id = user2_id, user1_id
-
-    conv = await database.fetch_one(
-        """
-        SELECT id FROM conversations
-        WHERE user1_id = :u1 AND user2_id = :u2
-        """,
-        {"u1": user1_id, "u2": user2_id},
-    )
-    return conv["id"] if conv else None
+# --- Endpoints ---
 
 
 @router.get("")
 async def list_conversations(
     current_user: dict = Depends(get_current_user),
+    filter: str = "important",
+    limit: int = 50,
 ) -> list[dict]:
-    """List all conversations for current user, newest first."""
+    """
+    List conversations for current user.
+
+    Filters:
+    - important: connected conversations + new claims from strangers
+    - connections: only connected conversations
+    - all: everything
+    """
     user_id = current_user["id"]
 
+    # Get all conversation partners (distinct users we have messages with)
+    # where messages aren't deleted from our perspective
+    conversations_query = """
+        WITH conversation_partners AS (
+            SELECT DISTINCT
+                CASE
+                    WHEN sender_id = :user_id THEN receiver_id
+                    ELSE sender_id
+                END as other_user_id
+            FROM messages
+            WHERE (sender_id = :user_id AND sender_deleted IS NULL)
+               OR (receiver_id = :user_id AND receiver_deleted IS NULL)
+        ),
+        conversation_data AS (
+            SELECT
+                cp.other_user_id as id,
+                u.handle,
+                u.first_name,
+                u.middle_name,
+                u.last_name,
+                u.headline,
+                u.avatar_path,
+                -- Check if connected (confirm message exists)
+                EXISTS (
+                    SELECT 1 FROM messages
+                    WHERE kind = 'confirm'
+                      AND ((sender_id = :user_id AND receiver_id = cp.other_user_id)
+                           OR (sender_id = cp.other_user_id AND receiver_id = :user_id))
+                ) as is_connected,
+                -- Get last message
+                (
+                    SELECT m.id FROM messages m
+                    WHERE ((m.sender_id = :user_id AND m.receiver_id = cp.other_user_id AND m.sender_deleted IS NULL)
+                           OR (m.sender_id = cp.other_user_id AND m.receiver_id = :user_id AND m.receiver_deleted IS NULL))
+                    ORDER BY m.created_at DESC
+                    LIMIT 1
+                ) as last_message_id,
+                (
+                    SELECT m.content FROM messages m
+                    WHERE ((m.sender_id = :user_id AND m.receiver_id = cp.other_user_id AND m.sender_deleted IS NULL)
+                           OR (m.sender_id = cp.other_user_id AND m.receiver_id = :user_id AND m.receiver_deleted IS NULL))
+                    ORDER BY m.created_at DESC
+                    LIMIT 1
+                ) as last_message_content,
+                (
+                    SELECT m.kind FROM messages m
+                    WHERE ((m.sender_id = :user_id AND m.receiver_id = cp.other_user_id AND m.sender_deleted IS NULL)
+                           OR (m.sender_id = cp.other_user_id AND m.receiver_id = :user_id AND m.receiver_deleted IS NULL))
+                    ORDER BY m.created_at DESC
+                    LIMIT 1
+                ) as last_message_kind,
+                (
+                    SELECT m.sender_id FROM messages m
+                    WHERE ((m.sender_id = :user_id AND m.receiver_id = cp.other_user_id AND m.sender_deleted IS NULL)
+                           OR (m.sender_id = cp.other_user_id AND m.receiver_id = :user_id AND m.receiver_deleted IS NULL))
+                    ORDER BY m.created_at DESC
+                    LIMIT 1
+                ) as last_message_sender_id,
+                (
+                    SELECT m.created_at FROM messages m
+                    WHERE ((m.sender_id = :user_id AND m.receiver_id = cp.other_user_id AND m.sender_deleted IS NULL)
+                           OR (m.sender_id = cp.other_user_id AND m.receiver_id = :user_id AND m.receiver_deleted IS NULL))
+                    ORDER BY m.created_at DESC
+                    LIMIT 1
+                ) as last_message_at,
+                -- Unread count (messages from them that are newer than our read marker)
+                (
+                    SELECT COUNT(*) FROM messages m
+                    WHERE m.sender_id = cp.other_user_id
+                      AND m.receiver_id = :user_id
+                      AND m.receiver_deleted IS NULL
+                      AND m.id > COALESCE((
+                          SELECT cr.last_read_message_id
+                          FROM conversation_reads cr
+                          JOIN messages rm ON rm.id = cr.last_read_message_id
+                          WHERE cr.user_id = :user_id
+                            AND ((rm.sender_id = :user_id AND rm.receiver_id = cp.other_user_id)
+                                 OR (rm.sender_id = cp.other_user_id AND rm.receiver_id = :user_id))
+                      ), 0)
+                ) as unread_count,
+                -- Has pending claim from them (for "important" filter)
+                EXISTS (
+                    SELECT 1 FROM messages m
+                    WHERE m.kind = 'claim'
+                      AND m.sender_id = cp.other_user_id
+                      AND m.receiver_id = :user_id
+                      AND m.receiver_deleted IS NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM messages m2
+                          WHERE m2.kind = 'confirm'
+                            AND m2.sender_id = :user_id
+                            AND m2.receiver_id = cp.other_user_id
+                            AND m2.created_at > m.created_at
+                      )
+                ) as has_pending_claim_from_them,
+                -- Has pending claim from me (for "important" filter)
+                EXISTS (
+                    SELECT 1 FROM messages m
+                    WHERE m.kind = 'claim'
+                      AND m.sender_id = :user_id
+                      AND m.receiver_id = cp.other_user_id
+                      AND m.sender_deleted IS NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM messages m2
+                          WHERE m2.kind = 'confirm'
+                            AND m2.sender_id = cp.other_user_id
+                            AND m2.receiver_id = :user_id
+                            AND m2.created_at > m.created_at
+                      )
+                ) as has_pending_claim_from_me
+            FROM conversation_partners cp
+            JOIN users u ON u.id = cp.other_user_id
+        )
+        SELECT * FROM conversation_data
+        WHERE last_message_id IS NOT NULL
+    """
+
+    # Add filter conditions
+    if filter == "connections":
+        conversations_query += " AND is_connected = true"
+    elif filter == "important":
+        conversations_query += " AND (is_connected = true OR has_pending_claim_from_them = true OR has_pending_claim_from_me = true)"
+    # "all" has no additional filter
+
+    conversations_query += " ORDER BY last_message_at DESC LIMIT :limit"
+
     conversations = await database.fetch_all(
-        """
-        SELECT
-            c.id,
-            c.last_message_at,
-            CASE WHEN c.user1_id = :user_id THEN c.user2_id ELSE c.user1_id END as other_user_id,
-            u.handle,
-            u.first_name,
-            u.middle_name,
-            u.last_name,
-            u.headline,
-            u.avatar_path,
-            m.content as last_message,
-            m.sender_id as last_sender_id,
-            (
-                SELECT COUNT(*) FROM messages
-                WHERE conversation_id = c.id
-                  AND sender_id != :user_id
-                  AND read_at IS NULL
-            ) as unread_count
-        FROM conversations c
-        JOIN users u ON u.id = CASE WHEN c.user1_id = :user_id THEN c.user2_id ELSE c.user1_id END
-        LEFT JOIN LATERAL (
-            SELECT content, sender_id FROM messages
-            WHERE conversation_id = c.id
-            ORDER BY created_at DESC
-            LIMIT 1
-        ) m ON true
-        WHERE c.user1_id = :user_id OR c.user2_id = :user_id
-        ORDER BY c.last_message_at DESC
-        """,
-        {"user_id": user_id},
+        conversations_query,
+        {"user_id": user_id, "limit": limit},
     )
 
     results = []
     for conv in conversations:
-        avatar_path = conv["avatar_path"]
         results.append({
-            "id": conv["id"],
-            "other_user": {
-                "id": conv["other_user_id"],
-                "handle": conv["handle"],
-                "name": _format_user_name(dict(conv)),
-                "headline": conv["headline"],
-                "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
+            "other_user": _format_other_user(dict(conv)),
+            "is_connected": conv["is_connected"],
+            "last_message": {
+                "content": conv["last_message_content"],
+                "kind": conv["last_message_kind"],
+                "is_mine": conv["last_message_sender_id"] == user_id,
             },
-            "last_message": conv["last_message"],
-            "last_message_is_mine": conv["last_sender_id"] == user_id if conv["last_sender_id"] else False,
             "unread_count": conv["unread_count"],
             "last_message_at": conv["last_message_at"].isoformat() if conv["last_message_at"] else None,
+            "has_pending_claim": conv["has_pending_claim_from_them"],
         })
 
     return results
@@ -212,11 +367,18 @@ async def get_unread_count(
 
     result = await database.fetch_one(
         """
-        SELECT COUNT(*) as count FROM messages m
-        JOIN conversations c ON m.conversation_id = c.id
-        WHERE (c.user1_id = :user_id OR c.user2_id = :user_id)
-          AND m.sender_id != :user_id
-          AND m.read_at IS NULL
+        SELECT COUNT(*) as count
+        FROM messages m
+        WHERE m.receiver_id = :user_id
+          AND m.receiver_deleted IS NULL
+          AND m.id > COALESCE((
+              SELECT cr.last_read_message_id
+              FROM conversation_reads cr
+              JOIN messages rm ON rm.id = cr.last_read_message_id
+              WHERE cr.user_id = :user_id
+                AND ((rm.sender_id = :user_id AND rm.receiver_id = m.sender_id)
+                     OR (rm.sender_id = m.sender_id AND rm.receiver_id = :user_id))
+          ), 0)
         """,
         {"user_id": user_id},
     )
@@ -224,17 +386,27 @@ async def get_unread_count(
     return {"count": result["count"] if result else 0}
 
 
-@router.get("/pending-connections-count")
-async def get_pending_connections_count(
+@router.get("/pending-claims-count")
+async def get_pending_claims_count(
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Get count of pending connection requests for navbar badge."""
+    """Get count of pending claims needing response for navbar badge."""
     user_id = current_user["id"]
 
     result = await database.fetch_one(
         """
-        SELECT COUNT(*) as count FROM connections
-        WHERE to_user_id = :user_id AND status = 'pending'
+        SELECT COUNT(DISTINCT m.sender_id) as count
+        FROM messages m
+        WHERE m.kind = 'claim'
+          AND m.receiver_id = :user_id
+          AND m.receiver_deleted IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM messages m2
+              WHERE m2.kind = 'confirm'
+                AND m2.sender_id = :user_id
+                AND m2.receiver_id = m.sender_id
+                AND m2.created_at > m.created_at
+          )
         """,
         {"user_id": user_id},
     )
@@ -247,18 +419,10 @@ async def get_conversation_with_user(
     handle: str,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Get or check conversation with a specific user."""
+    """Get conversation state with a specific user."""
     user_id = current_user["id"]
 
-    # Get the other user
-    other_user = await database.fetch_one(
-        """
-        SELECT id, handle, first_name, middle_name, last_name, headline, avatar_path
-        FROM users WHERE handle = :handle
-        """,
-        {"handle": handle.lower()},
-    )
-
+    other_user = await _get_user_by_handle(handle)
     if other_user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -267,30 +431,26 @@ async def get_conversation_with_user(
 
     other_user_id = other_user["id"]
 
-    # Check if can message
-    can_msg, reason = await _can_message(user_id, other_user_id)
+    # Check connection status
+    connected = await _is_connected(user_id, other_user_id)
 
-    # Get existing conversation if any
-    conv_id = await _get_conversation_id(user_id, other_user_id)
+    # Check for pending claims in both directions
+    pending_claim_from_me = await _has_pending_claim(user_id, other_user_id)
+    pending_claim_from_them = await _has_pending_claim(other_user_id, user_id)
 
-    avatar_path = other_user["avatar_path"]
     return {
-        "conversation_id": conv_id,
-        "can_message": can_msg,
-        "reason": reason,
-        "other_user": {
-            "id": other_user_id,
-            "handle": other_user["handle"],
-            "name": _format_user_name(dict(other_user)),
-            "headline": other_user["headline"],
-            "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
-        },
+        "other_user": _format_other_user(dict(other_user)),
+        "is_connected": connected,
+        "pending_claim_from_me": pending_claim_from_me,
+        "pending_claim_from_them": pending_claim_from_them,
+        "can_send_text": connected,
+        "can_send_claim": not connected and not pending_claim_from_me,
     }
 
 
-@router.get("/{conversation_id}")
+@router.get("/with/{handle}/messages")
 async def get_messages(
-    conversation_id: int,
+    handle: str,
     current_user: dict = Depends(get_current_user),
     before_id: int | None = None,
     limit: int = 50,
@@ -298,80 +458,62 @@ async def get_messages(
     """Get messages in a conversation."""
     user_id = current_user["id"]
 
-    # Verify user is part of conversation
-    conv = await database.fetch_one(
-        """
-        SELECT user1_id, user2_id FROM conversations
-        WHERE id = :id AND (user1_id = :user_id OR user2_id = :user_id)
-        """,
-        {"id": conversation_id, "user_id": user_id},
-    )
+    other_user = await _get_user_by_handle(handle)
+    if other_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    if conv is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-
-    # Get the other user
-    other_user_id = conv["user2_id"] if conv["user1_id"] == user_id else conv["user1_id"]
-    other_user = await database.fetch_one(
-        """
-        SELECT id, handle, first_name, middle_name, last_name, headline, avatar_path
-        FROM users WHERE id = :id
-        """,
-        {"id": other_user_id},
-    )
+    other_user_id = other_user["id"]
 
     # Build query for messages
     if before_id:
         messages = await database.fetch_all(
             """
-            SELECT id, sender_id, content, read_at, created_at
+            SELECT id, kind, sender_id, receiver_id, content, reply_to, created_at
             FROM messages
-            WHERE conversation_id = :conv_id AND id < :before_id
+            WHERE ((sender_id = :user_id AND receiver_id = :other_id AND sender_deleted IS NULL)
+                   OR (sender_id = :other_id AND receiver_id = :user_id AND receiver_deleted IS NULL))
+              AND id < :before_id
             ORDER BY created_at DESC
             LIMIT :limit
             """,
-            {"conv_id": conversation_id, "before_id": before_id, "limit": limit},
+            {"user_id": user_id, "other_id": other_user_id, "before_id": before_id, "limit": limit},
         )
     else:
         messages = await database.fetch_all(
             """
-            SELECT id, sender_id, content, read_at, created_at
+            SELECT id, kind, sender_id, receiver_id, content, reply_to, created_at
             FROM messages
-            WHERE conversation_id = :conv_id
+            WHERE ((sender_id = :user_id AND receiver_id = :other_id AND sender_deleted IS NULL)
+                   OR (sender_id = :other_id AND receiver_id = :user_id AND receiver_deleted IS NULL))
             ORDER BY created_at DESC
             LIMIT :limit
             """,
-            {"conv_id": conversation_id, "limit": limit},
+            {"user_id": user_id, "other_id": other_user_id, "limit": limit},
         )
 
-    # Mark messages as read
-    await database.execute(
-        """
-        UPDATE messages
-        SET read_at = NOW()
-        WHERE conversation_id = :conv_id
-          AND sender_id != :user_id
-          AND read_at IS NULL
-        """,
-        {"conv_id": conversation_id, "user_id": user_id},
-    )
+    # Mark as read (update last_read_message_id)
+    if messages:
+        max_message_id = max(m["id"] for m in messages)
+        await _update_last_read(user_id, other_user_id, max_message_id)
 
-    avatar_path = other_user["avatar_path"] if other_user else None
+    # Check connection status
+    connected = await _is_connected(user_id, other_user_id)
+
+    # Check for pending claim from them
+    pending_claim_from_them = await _has_pending_claim(other_user_id, user_id)
+
     return {
-        "conversation_id": conversation_id,
-        "other_user": {
-            "id": other_user_id,
-            "handle": other_user["handle"] if other_user else None,
-            "name": _format_user_name(dict(other_user)) if other_user else None,
-            "headline": other_user["headline"] if other_user else None,
-            "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
-        },
+        "other_user": _format_other_user(dict(other_user)),
+        "is_connected": connected,
+        "pending_claim_from_them": pending_claim_from_them,
         "messages": [
             {
                 "id": m["id"],
+                "kind": m["kind"],
                 "sender_id": m["sender_id"],
                 "is_mine": m["sender_id"] == user_id,
                 "content": m["content"],
+                "reply_to": m["reply_to"],
                 "created_at": m["created_at"].isoformat() if m["created_at"] else None,
             }
             for m in reversed(messages)  # Return oldest first for display
@@ -380,21 +522,104 @@ async def get_messages(
     }
 
 
-@router.post("/to/{handle}")
-async def send_message_to_user(
+@router.post("/to/{handle}/claim")
+async def send_claim(
+    handle: str,
+    payload: ClaimCreate,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Send a claim (connection request) to a user."""
+    user_id = current_user["id"]
+
+    other_user = await _get_user_by_handle(handle)
+    if other_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if other_user["id"] == user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot claim yourself")
+
+    other_user_id = other_user["id"]
+
+    # Check if already connected
+    if await _is_connected(user_id, other_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Already connected",
+        )
+
+    # Check if there's already a pending claim from me
+    if await _has_pending_claim(user_id, other_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You already have a pending claim",
+        )
+
+    # TODO: Add rate limiting (3/day per pair, 100/day global)
+
+    # Insert claim message
+    result = await database.fetch_one(
+        """
+        INSERT INTO messages (kind, sender_id, receiver_id, content)
+        VALUES ('claim', :sender_id, :receiver_id, :content)
+        RETURNING id, created_at
+        """,
+        {"sender_id": user_id, "receiver_id": other_user_id, "content": payload.content},
+    )
+
+    return {
+        "id": result["id"],
+        "created_at": result["created_at"].isoformat() if result["created_at"] else None,
+    }
+
+
+@router.post("/to/{handle}/confirm")
+async def confirm_claim(
+    handle: str,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Confirm a claim from another user (creates connection)."""
+    user_id = current_user["id"]
+
+    other_user = await _get_user_by_handle(handle)
+    if other_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    other_user_id = other_user["id"]
+
+    # Check if there's a pending claim from them
+    if not await _has_pending_claim(other_user_id, user_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No pending claim to confirm",
+        )
+
+    # Insert confirm message
+    result = await database.fetch_one(
+        """
+        INSERT INTO messages (kind, sender_id, receiver_id, content)
+        VALUES ('confirm', :sender_id, :receiver_id, NULL)
+        RETURNING id, created_at
+        """,
+        {"sender_id": user_id, "receiver_id": other_user_id},
+    )
+
+    return {
+        "id": result["id"],
+        "is_connected": True,
+        "created_at": result["created_at"].isoformat() if result["created_at"] else None,
+    }
+
+
+@router.post("/to/{handle}/message")
+async def send_message(
     handle: str,
     payload: MessageCreate,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Send a message to a user by handle."""
+    """Send a regular text message to a connected user."""
     user_id = current_user["id"]
 
-    # Get the other user
-    other_user = await database.fetch_one(
-        "SELECT id FROM users WHERE handle = :handle",
-        {"handle": handle.lower()},
-    )
-
+    other_user = await _get_user_by_handle(handle)
     if other_user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -403,107 +628,140 @@ async def send_message_to_user(
 
     other_user_id = other_user["id"]
 
-    # Check if can message
-    can_msg, reason = await _can_message(user_id, other_user_id)
-    if not can_msg:
-        if reason == "already_sent_intro":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only send one message until they respond or accept your connection",
-            )
+    # Check if connected
+    if not await _is_connected(user_id, other_user_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You must be connected to message this user",
+            detail="You must be connected to send messages",
         )
-
-    # Get or create conversation
-    conv_id = await _get_or_create_conversation(user_id, other_user_id)
 
     # Insert message
     result = await database.fetch_one(
         """
-        INSERT INTO messages (conversation_id, sender_id, content)
-        VALUES (:conv_id, :sender_id, :content)
+        INSERT INTO messages (kind, sender_id, receiver_id, content, reply_to)
+        VALUES ('text', :sender_id, :receiver_id, :content, :reply_to)
         RETURNING id, created_at
         """,
-        {"conv_id": conv_id, "sender_id": user_id, "content": payload.content},
-    )
-
-    # Update conversation last_message_at
-    await database.execute(
-        """
-        UPDATE conversations
-        SET last_message_at = NOW()
-        WHERE id = :id
-        """,
-        {"id": conv_id},
+        {
+            "sender_id": user_id,
+            "receiver_id": other_user_id,
+            "content": payload.content,
+            "reply_to": payload.reply_to,
+        },
     )
 
     return {
         "id": result["id"],
-        "conversation_id": conv_id,
         "created_at": result["created_at"].isoformat() if result["created_at"] else None,
     }
 
 
-@router.post("/{conversation_id}")
-async def send_message_to_conversation(
-    conversation_id: int,
-    payload: MessageCreate,
+@router.delete("/with/{handle}")
+async def delete_conversation(
+    handle: str,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Send a message to an existing conversation."""
+    """
+    Delete user's copy of the conversation (acts as ignore for pending claims).
+    This soft-deletes all messages from the user's perspective.
+    """
     user_id = current_user["id"]
 
-    # Verify user is part of conversation and get other user
-    conv = await database.fetch_one(
-        """
-        SELECT user1_id, user2_id FROM conversations
-        WHERE id = :id AND (user1_id = :user_id OR user2_id = :user_id)
-        """,
-        {"id": conversation_id, "user_id": user_id},
-    )
+    other_user = await _get_user_by_handle(handle)
+    if other_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    if conv is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    other_user_id = other_user["id"]
 
-    other_user_id = conv["user2_id"] if conv["user1_id"] == user_id else conv["user1_id"]
-
-    # Check if can message
-    can_msg, reason = await _can_message(user_id, other_user_id)
-    if not can_msg:
-        if reason == "already_sent_intro":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only send one message until they respond or accept your connection",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You must be connected to message this user",
-        )
-
-    # Insert message
-    result = await database.fetch_one(
-        """
-        INSERT INTO messages (conversation_id, sender_id, content)
-        VALUES (:conv_id, :sender_id, :content)
-        RETURNING id, created_at
-        """,
-        {"conv_id": conversation_id, "sender_id": user_id, "content": payload.content},
-    )
-
-    # Update conversation last_message_at
+    # Soft delete messages where user is sender
     await database.execute(
         """
-        UPDATE conversations
-        SET last_message_at = NOW()
-        WHERE id = :id
+        UPDATE messages
+        SET sender_deleted = NOW()
+        WHERE sender_id = :user_id AND receiver_id = :other_id AND sender_deleted IS NULL
         """,
-        {"id": conversation_id},
+        {"user_id": user_id, "other_id": other_user_id},
     )
 
-    return {
-        "id": result["id"],
-        "conversation_id": conversation_id,
-        "created_at": result["created_at"].isoformat() if result["created_at"] else None,
-    }
+    # Soft delete messages where user is receiver
+    await database.execute(
+        """
+        UPDATE messages
+        SET receiver_deleted = NOW()
+        WHERE sender_id = :other_id AND receiver_id = :user_id AND receiver_deleted IS NULL
+        """,
+        {"user_id": user_id, "other_id": other_user_id},
+    )
+
+    return {"deleted": True}
+
+
+@router.delete("/connection/{handle}")
+async def remove_connection(
+    handle: str,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Remove connection with a user.
+    This deletes all confirm messages between the users, reverting to non-connected state.
+    Conversation history remains visible.
+    """
+    user_id = current_user["id"]
+
+    other_user = await _get_user_by_handle(handle)
+    if other_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    other_user_id = other_user["id"]
+
+    # Check if actually connected
+    if not await _is_connected(user_id, other_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Not connected",
+        )
+
+    # Delete all confirm messages between the users
+    await database.execute(
+        """
+        DELETE FROM messages
+        WHERE kind = 'confirm'
+          AND ((sender_id = :user_id AND receiver_id = :other_id)
+               OR (sender_id = :other_id AND receiver_id = :user_id))
+        """,
+        {"user_id": user_id, "other_id": other_user_id},
+    )
+
+    return {"removed": True, "is_connected": False}
+
+
+@router.post("/with/{handle}/report")
+async def report_conversation(
+    handle: str,
+    payload: AbuseReportCreate,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Report a user for abuse."""
+    user_id = current_user["id"]
+
+    other_user = await _get_user_by_handle(handle)
+    if other_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if other_user["id"] == user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot report yourself")
+
+    other_user_id = other_user["id"]
+
+    # TODO: Add rate limiting (1/day per user, 100/day global)
+
+    # Insert abuse report
+    await database.execute(
+        """
+        INSERT INTO abuse_reports (reporter_id, reported_user_id, reason)
+        VALUES (:reporter_id, :reported_user_id, :reason)
+        """,
+        {"reporter_id": user_id, "reported_user_id": other_user_id, "reason": payload.reason},
+    )
+
+    return {"reported": True}
