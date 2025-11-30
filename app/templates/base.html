@@ -85,10 +85,6 @@
                     </button>
                     <div id="avatar-dropdown" class="hidden absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                         <a href="/profile" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Profile</a>
-                        <a href="/messages" class="flex items-center justify-between px-4 py-2 text-gray-700 hover:bg-gray-100">
-                            Messages
-                            <span id="messages-badge-menu" class="hidden w-5 h-5 bg-brand-pink text-white text-xs rounded-full flex items-center justify-center font-medium"></span>
-                        </a>
                         <a href="/settings" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Settings</a>
                         <hr class="my-1 border-gray-200">
                         <button onclick="logout()" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Log out</button>
@@ -152,13 +148,10 @@
                         }
 
                         const badge = document.getElementById('messages-badge');
-                        const badgeMenu = document.getElementById('messages-badge-menu');
                         if (totalBadge > 0) {
                             const displayCount = totalBadge > 9 ? '9+' : totalBadge.toString();
                             badge.textContent = displayCount;
                             badge.classList.remove('hidden');
-                            badgeMenu.textContent = displayCount;
-                            badgeMenu.classList.remove('hidden');
                         }
                     } catch (e) {
                         // Ignore fetch errors
