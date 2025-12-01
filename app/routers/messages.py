@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 
@@ -5,13 +6,36 @@ from app.auth import get_current_user
 from app.db import database
 from app.storage import get_avatar_url
 
+# Cloudflare Durable Chat worker URL for real-time notifications
+CHAT_WORKER_URL = "https://chat.justpros.org"
+
 router = APIRouter(prefix="/api/messages", tags=["messages"])
+
+
+async def notify_user(user_handle: str, notification_type: str = "new_message") -> None:
+    """Send a real-time notification to a user via CF Durable Chat worker.
+
+    This broadcasts a message to the user's personal notification room.
+    The client WebSocket connection will receive this and refresh messages.
+    Uses the /broadcast HTTP endpoint (server-to-server communication).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            # POST to the PartyServer room's broadcast endpoint
+            # PartyServer routes: /parties/:className/:roomName
+            await client.post(
+                f"{CHAT_WORKER_URL}/parties/chat/{user_handle}/broadcast",
+                json={"message": notification_type},
+            )
+    except Exception:
+        # Notification failures are non-critical, don't break the request
+        pass
 
 
 # --- Pydantic Models ---
 
 
-class ClaimCreate(BaseModel):
+class ConnectionRequestCreate(BaseModel):
     content: str
 
     @field_validator("content")
@@ -19,7 +43,7 @@ class ClaimCreate(BaseModel):
     def validate_content(cls, v: str) -> str:
         v = v.strip()
         if len(v) < 1 or len(v) > 500:
-            raise ValueError("Claim must be 1-500 characters")
+            raise ValueError("Message must be 1-500 characters")
         return v
 
 
@@ -87,16 +111,16 @@ async def _is_connected(user1_id: int, user2_id: int) -> bool:
     return result is not None
 
 
-async def _has_pending_claim(from_user_id: int, to_user_id: int) -> bool:
-    """Check if there's a pending claim (claim without confirm response)."""
-    # A claim is pending if:
-    # 1. There's a claim from from_user to to_user
-    # 2. There's no confirm from to_user to from_user after the claim
+async def _has_pending_connection_request(from_user_id: int, to_user_id: int) -> bool:
+    """Check if there's a pending connection request (request without confirm response)."""
+    # A connection request is pending if:
+    # 1. There's a connection_request from from_user to to_user
+    # 2. There's no confirm from to_user to from_user after the request
     # 3. The receiver hasn't deleted the conversation (which acts as ignore)
-    claim = await database.fetch_one(
+    request = await database.fetch_one(
         """
         SELECT m.id, m.created_at FROM messages m
-        WHERE m.kind = 'claim'
+        WHERE m.kind = 'connection_request'
           AND m.sender_id = :from_id
           AND m.receiver_id = :to_id
           AND m.receiver_deleted IS NULL
@@ -106,20 +130,20 @@ async def _has_pending_claim(from_user_id: int, to_user_id: int) -> bool:
         {"from_id": from_user_id, "to_id": to_user_id},
     )
 
-    if not claim:
+    if not request:
         return False
 
-    # Check if there's a confirm after this claim
+    # Check if there's a confirm after this request
     confirm = await database.fetch_one(
         """
         SELECT 1 FROM messages
         WHERE kind = 'confirm'
           AND sender_id = :to_id
           AND receiver_id = :from_id
-          AND created_at > :claim_time
+          AND created_at > :request_time
         LIMIT 1
         """,
-        {"to_id": to_user_id, "from_id": from_user_id, "claim_time": claim["created_at"]},
+        {"to_id": to_user_id, "from_id": from_user_id, "request_time": request["created_at"]},
     )
 
     return confirm is None
@@ -289,10 +313,10 @@ async def list_conversations(
                                  OR (rm.sender_id = cp.other_user_id AND rm.receiver_id = :user_id))
                       ), 0)
                 ) as unread_count,
-                -- Has pending claim from them (for "important" filter)
+                -- Has pending request from them (for "important" filter)
                 EXISTS (
                     SELECT 1 FROM messages m
-                    WHERE m.kind = 'claim'
+                    WHERE m.kind = 'connection_request'
                       AND m.sender_id = cp.other_user_id
                       AND m.receiver_id = :user_id
                       AND m.receiver_deleted IS NULL
@@ -303,11 +327,11 @@ async def list_conversations(
                             AND m2.receiver_id = cp.other_user_id
                             AND m2.created_at > m.created_at
                       )
-                ) as has_pending_claim_from_them,
-                -- Has pending claim from me (for "important" filter)
+                ) as has_pending_request_from_them,
+                -- Has pending request from me (for "important" filter)
                 EXISTS (
                     SELECT 1 FROM messages m
-                    WHERE m.kind = 'claim'
+                    WHERE m.kind = 'connection_request'
                       AND m.sender_id = :user_id
                       AND m.receiver_id = cp.other_user_id
                       AND m.sender_deleted IS NULL
@@ -318,7 +342,7 @@ async def list_conversations(
                             AND m2.receiver_id = :user_id
                             AND m2.created_at > m.created_at
                       )
-                ) as has_pending_claim_from_me
+                ) as has_pending_request_from_me
             FROM conversation_partners cp
             JOIN users u ON u.id = cp.other_user_id
         )
@@ -330,7 +354,7 @@ async def list_conversations(
     if filter == "connections":
         conversations_query += " AND is_connected = true"
     elif filter == "important":
-        conversations_query += " AND (is_connected = true OR has_pending_claim_from_them = true OR has_pending_claim_from_me = true)"
+        conversations_query += " AND (is_connected = true OR has_pending_request_from_them = true OR has_pending_request_from_me = true)"
     # "all" has no additional filter
 
     conversations_query += " ORDER BY last_message_at DESC LIMIT :limit"
@@ -352,7 +376,7 @@ async def list_conversations(
             },
             "unread_count": conv["unread_count"],
             "last_message_at": conv["last_message_at"].isoformat() if conv["last_message_at"] else None,
-            "has_pending_claim": conv["has_pending_claim_from_them"],
+            "has_pending_request": conv["has_pending_request_from_them"],
         })
 
     return results
@@ -386,18 +410,18 @@ async def get_unread_count(
     return {"count": result["count"] if result else 0}
 
 
-@router.get("/pending-claims-count")
-async def get_pending_claims_count(
+@router.get("/pending-requests-count")
+async def get_pending_requests_count(
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Get count of pending claims needing response for navbar badge."""
+    """Get count of pending connection requests needing response for navbar badge."""
     user_id = current_user["id"]
 
     result = await database.fetch_one(
         """
         SELECT COUNT(DISTINCT m.sender_id) as count
         FROM messages m
-        WHERE m.kind = 'claim'
+        WHERE m.kind = 'connection_request'
           AND m.receiver_id = :user_id
           AND m.receiver_deleted IS NULL
           AND NOT EXISTS (
@@ -434,17 +458,17 @@ async def get_conversation_with_user(
     # Check connection status
     connected = await _is_connected(user_id, other_user_id)
 
-    # Check for pending claims in both directions
-    pending_claim_from_me = await _has_pending_claim(user_id, other_user_id)
-    pending_claim_from_them = await _has_pending_claim(other_user_id, user_id)
+    # Check for pending requests in both directions
+    pending_request_from_me = await _has_pending_connection_request(user_id, other_user_id)
+    pending_request_from_them = await _has_pending_connection_request(other_user_id, user_id)
 
     return {
         "other_user": _format_other_user(dict(other_user)),
         "is_connected": connected,
-        "pending_claim_from_me": pending_claim_from_me,
-        "pending_claim_from_them": pending_claim_from_them,
+        "pending_request_from_me": pending_request_from_me,
+        "pending_request_from_them": pending_request_from_them,
         "can_send_text": connected,
-        "can_send_claim": not connected and not pending_claim_from_me,
+        "can_send_request": not connected and not pending_request_from_me,
     }
 
 
@@ -499,13 +523,13 @@ async def get_messages(
     # Check connection status
     connected = await _is_connected(user_id, other_user_id)
 
-    # Check for pending claim from them
-    pending_claim_from_them = await _has_pending_claim(other_user_id, user_id)
+    # Check for pending request from them
+    pending_request_from_them = await _has_pending_connection_request(other_user_id, user_id)
 
     return {
         "other_user": _format_other_user(dict(other_user)),
         "is_connected": connected,
-        "pending_claim_from_them": pending_claim_from_them,
+        "pending_request_from_them": pending_request_from_them,
         "messages": [
             {
                 "id": m["id"],
@@ -522,13 +546,13 @@ async def get_messages(
     }
 
 
-@router.post("/to/{handle}/claim")
-async def send_claim(
+@router.post("/to/{handle}/connect")
+async def send_connection_request(
     handle: str,
-    payload: ClaimCreate,
+    payload: ConnectionRequestCreate,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Send a claim (connection request) to a user."""
+    """Send a connection request to a user."""
     user_id = current_user["id"]
 
     other_user = await _get_user_by_handle(handle)
@@ -536,7 +560,7 @@ async def send_claim(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     if other_user["id"] == user_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot claim yourself")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot connect with yourself")
 
     other_user_id = other_user["id"]
 
@@ -547,24 +571,27 @@ async def send_claim(
             detail="Already connected",
         )
 
-    # Check if there's already a pending claim from me
-    if await _has_pending_claim(user_id, other_user_id):
+    # Check if there's already a pending request from me
+    if await _has_pending_connection_request(user_id, other_user_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You already have a pending claim",
+            detail="You already have a pending request",
         )
 
     # TODO: Add rate limiting (3/day per pair, 100/day global)
 
-    # Insert claim message
+    # Insert connection request message
     result = await database.fetch_one(
         """
         INSERT INTO messages (kind, sender_id, receiver_id, content)
-        VALUES ('claim', :sender_id, :receiver_id, :content)
+        VALUES ('connection_request', :sender_id, :receiver_id, :content)
         RETURNING id, created_at
         """,
         {"sender_id": user_id, "receiver_id": other_user_id, "content": payload.content},
     )
+
+    # Notify receiver of new connection request
+    await notify_user(other_user["handle"], "new_message")
 
     return {
         "id": result["id"],
@@ -573,11 +600,11 @@ async def send_claim(
 
 
 @router.post("/to/{handle}/confirm")
-async def confirm_claim(
+async def confirm_connection_request(
     handle: str,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Confirm a claim from another user (creates connection)."""
+    """Confirm a connection request from another user (creates connection)."""
     user_id = current_user["id"]
 
     other_user = await _get_user_by_handle(handle)
@@ -586,11 +613,11 @@ async def confirm_claim(
 
     other_user_id = other_user["id"]
 
-    # Check if there's a pending claim from them
-    if not await _has_pending_claim(other_user_id, user_id):
+    # Check if there's a pending request from them
+    if not await _has_pending_connection_request(other_user_id, user_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No pending claim to confirm",
+            detail="No pending request to confirm",
         )
 
     # Insert confirm message
@@ -602,6 +629,9 @@ async def confirm_claim(
         """,
         {"sender_id": user_id, "receiver_id": other_user_id},
     )
+
+    # Notify the other user that their request was confirmed
+    await notify_user(other_user["handle"], "new_message")
 
     return {
         "id": result["id"],
@@ -649,6 +679,9 @@ async def send_message(
             "reply_to": payload.reply_to,
         },
     )
+
+    # Notify receiver of new message
+    await notify_user(other_user["handle"], "new_message")
 
     return {
         "id": result["id"],

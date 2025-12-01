@@ -126,7 +126,7 @@
                         const [meResponse, unreadResponse, pendingResponse] = await Promise.all([
                             fetch('/api/me', { headers: { 'Authorization': `Bearer ${token}` } }),
                             fetch('/api/messages/unread-count', { headers: { 'Authorization': `Bearer ${token}` } }),
-                            fetch('/api/messages/pending-claims-count', { headers: { 'Authorization': `Bearer ${token}` } })
+                            fetch('/api/messages/pending-requests-count', { headers: { 'Authorization': `Bearer ${token}` } })
                         ]);
 
                         if (meResponse.ok) {

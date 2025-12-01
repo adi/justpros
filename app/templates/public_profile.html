@@ -210,13 +210,13 @@
                 messageBtn.classList.remove('hidden');
                 statusBadge.classList.remove('hidden');
                 connectBtn.classList.add('hidden');
-            } else if (conversationState.pending_claim_from_them) {
-                // They sent me a claim - show Respond button
+            } else if (conversationState.pending_request_from_them) {
+                // They sent me a request - show Respond button
                 connectBtn.textContent = 'Respond';
                 connectBtn.onclick = showPendingModal;
                 connectBtn.classList.remove('hidden');
-            } else if (conversationState.pending_claim_from_me) {
-                // I sent them a claim - show pending status
+            } else if (conversationState.pending_request_from_me) {
+                // I sent them a request - show pending status
                 connectBtn.textContent = 'Pending...';
                 connectBtn.disabled = true;
                 connectBtn.className = 'px-4 py-2 bg-gray-100 text-gray-500 rounded-md text-sm font-medium cursor-not-allowed';
@@ -266,7 +266,7 @@
         submitBtn.textContent = 'Sending...';
 
         try {
-            const response = await fetch(`/api/messages/to/${encodeURIComponent(handle)}/claim`, {
+            const response = await fetch(`/api/messages/to/${encodeURIComponent(handle)}/connect`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -302,10 +302,10 @@
             if (!response.ok) return;
 
             const data = await response.json();
-            // Find the pending claim from them
-            const pendingClaim = data.messages.find(m => m.kind === 'claim' && !m.is_mine);
-            if (pendingClaim) {
-                document.getElementById('pending-content').textContent = pendingClaim.content;
+            // Find the pending connection request from them
+            const pendingRequest = data.messages.find(m => m.kind === 'connection_request' && !m.is_mine);
+            if (pendingRequest) {
+                document.getElementById('pending-content').textContent = pendingRequest.content;
                 document.getElementById('pending-modal').classList.remove('hidden');
             }
         } catch (e) {

@@ -178,8 +178,9 @@
     let currentOtherHandle = null;
     let currentOtherName = null;
     let currentFilter = 'important';
-    let conversationState = null;  // Stores is_connected, pending_claim_from_me, pending_claim_from_them
-    let pollingInterval = null;
+    let conversationState = null;
+    let currentUserHandle = null;
+    let notificationSocket = null;
 
     async function init() {
         const token = localStorage.getItem('token');
@@ -188,11 +189,69 @@
             return;
         }
 
+        // Get current user's handle for WebSocket room
+        try {
+            const meResponse = await fetch('/api/me', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (meResponse.ok) {
+                const me = await meResponse.json();
+                currentUserHandle = me.handle;
+                connectNotificationSocket();
+            }
+        } catch (e) {
+            console.error('Failed to get current user:', e);
+        }
+
         await loadConversations();
 
         // If a handle was specified in URL, open that conversation
         if (selectedHandle) {
             await openConversation(selectedHandle);
+        }
+    }
+
+    function connectNotificationSocket() {
+        if (!currentUserHandle) return;
+
+        // PartyServer WebSocket URL: /parties/:className/:roomName
+        const wsUrl = `wss://chat.justpros.org/parties/chat/${currentUserHandle}`;
+
+        try {
+            notificationSocket = new WebSocket(wsUrl);
+
+            notificationSocket.onopen = () => {
+                // Connection established, no join message needed for notifications
+            };
+
+            notificationSocket.onmessage = async (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    // Check if this is a notification message
+                    if (data.type === 'notification' && data.message === 'new_message') {
+                        // Refresh conversation list and current conversation
+                        await loadConversations();
+                        await updateHeaderBadge();
+                        if (currentOtherHandle) {
+                            await refreshCurrentConversation();
+                        }
+                    }
+                } catch (e) {
+                    // Ignore non-JSON messages
+                }
+            };
+
+            notificationSocket.onclose = () => {
+                // Reconnect after a delay
+                setTimeout(connectNotificationSocket, 3000);
+            };
+
+            notificationSocket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        } catch (e) {
+            console.error('Failed to connect WebSocket:', e);
+            // Fall back to no real-time updates
         }
     }
 
@@ -235,8 +294,8 @@
             empty.classList.add('hidden');
             list.innerHTML = conversations.map(conv => {
                 const isSelected = currentOtherHandle === conv.other_user.handle;
-                const hasPendingClaim = conv.has_pending_claim;
-                const bgClass = hasPendingClaim ? 'bg-pink-50 hover:bg-pink-100' : (isSelected ? 'bg-gray-100' : 'hover:bg-gray-50');
+                const hasPendingRequest = conv.has_pending_request;
+                const bgClass = hasPendingRequest ? 'bg-pink-50 hover:bg-pink-100' : (isSelected ? 'bg-gray-100' : 'hover:bg-gray-50');
 
                 // Format date
                 const dateStr = conv.last_message_at ? formatTime(conv.last_message_at) : '';
@@ -301,16 +360,16 @@
             const data = await response.json();
             conversationState = {
                 is_connected: data.is_connected,
-                pending_claim_from_them: data.pending_claim_from_them
+                pending_request_from_them: data.pending_request_from_them
             };
 
-            // Also get pending_claim_from_me
+            // Also get pending_request_from_me
             const stateResponse = await fetch(`/api/messages/with/${encodeURIComponent(handle)}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (stateResponse.ok) {
                 const stateData = await stateResponse.json();
-                conversationState.pending_claim_from_me = stateData.pending_claim_from_me;
+                conversationState.pending_request_from_me = stateData.pending_request_from_me;
             }
 
             showChatUI(data.other_user, data.messages, conversationState);
@@ -318,9 +377,6 @@
             // Refresh conversations to update unread counts
             await loadConversations();
             await updateHeaderBadge();
-
-            // Start polling for updates
-            startPolling();
         } catch (e) {
             console.error('Failed to load conversation:', e);
         }
@@ -364,10 +420,10 @@
     }
 
     function renderMessage(msg, otherUser) {
-        if (msg.kind === 'claim') {
-            // Claim message - pastel card style
+        if (msg.kind === 'connection_request') {
+            // Connection request message - pastel card style
             const isPending = !conversationState.is_connected && !msg.is_mine;
-            const showButtons = isPending && conversationState.pending_claim_from_them;
+            const showButtons = isPending && conversationState.pending_request_from_them;
 
             return `
                 <div class="flex ${msg.is_mine ? 'justify-end' : 'justify-start'}">
@@ -376,15 +432,15 @@
                             <svg class="w-4 h-4 ${msg.is_mine ? 'text-blue-600' : 'text-pink-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
                             </svg>
-                            <span class="text-sm font-medium ${msg.is_mine ? 'text-blue-700' : 'text-pink-700'}">Claim</span>
+                            <span class="text-sm font-medium ${msg.is_mine ? 'text-blue-700' : 'text-pink-700'}">Connection Request</span>
                         </div>
                         <p class="whitespace-pre-wrap ${msg.is_mine ? 'text-blue-900' : 'text-pink-900'}">${escapeHtml(msg.content)}</p>
                         ${showButtons ? `
                             <div class="flex gap-2 mt-3 pt-3 border-t border-pink-200">
-                                <button onclick="ignoreClaimFromChat()" class="flex-1 px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-white">
+                                <button onclick="ignoreRequestFromChat()" class="flex-1 px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-white">
                                     Ignore
                                 </button>
-                                <button onclick="confirmClaimFromChat()" class="flex-1 px-3 py-1.5 bg-brand-blue text-white text-sm rounded-md hover:opacity-90">
+                                <button onclick="confirmRequestFromChat()" class="flex-1 px-3 py-1.5 bg-brand-blue text-white text-sm rounded-md hover:opacity-90">
                                     Confirm
                                 </button>
                             </div>
@@ -405,7 +461,7 @@
                             <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                             </svg>
-                            <span class="text-sm font-medium text-green-700">Claim confirmed</span>
+                            <span class="text-sm font-medium text-green-700">Connection confirmed</span>
                         </div>
                         <p class="text-green-800">${confirmText}</p>
                         <p class="text-xs text-green-500 mt-2">${formatTime(msg.created_at)}</p>
@@ -437,11 +493,11 @@
         if (state.is_connected) {
             // Connected - show text input
             form.classList.remove('hidden');
-        } else if (state.pending_claim_from_me) {
-            // I sent a pending claim - show waiting message
+        } else if (state.pending_request_from_me) {
+            // I sent a pending request - show waiting message
             pendingSentInfo.classList.remove('hidden');
         } else {
-            // Not connected, no pending claim - show claim button
+            // Not connected, no pending request - show connect button
             claimPrompt.classList.remove('hidden');
         }
     }
@@ -494,7 +550,7 @@
 
         const token = localStorage.getItem('token');
         try {
-            const response = await fetch(`/api/messages/to/${encodeURIComponent(currentOtherHandle)}/claim`, {
+            const response = await fetch(`/api/messages/to/${encodeURIComponent(currentOtherHandle)}/connect`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -512,13 +568,13 @@
                 alert(error.detail || 'Failed to send request');
             }
         } catch (e) {
-            console.error('Failed to send claim:', e);
+            console.error('Failed to send connection request:', e);
             alert('Failed to send request');
         }
     });
 
     // Confirm/Ignore from chat
-    async function confirmClaimFromChat() {
+    async function confirmRequestFromChat() {
         if (!currentOtherHandle) return;
         const token = localStorage.getItem('token');
         try {
@@ -539,7 +595,7 @@
         }
     }
 
-    async function ignoreClaimFromChat() {
+    async function ignoreRequestFromChat() {
         if (!currentOtherHandle) return;
         if (!confirm('Ignore this connection request? This will delete the conversation.')) return;
 
@@ -713,7 +769,6 @@
 
     function closeChat() {
         currentOtherHandle = null;
-        stopPolling();
 
         document.getElementById('conversations-panel').classList.remove('hidden', 'sm:flex');
         document.getElementById('conversations-panel').classList.add('flex');
@@ -729,22 +784,6 @@
         history.replaceState(null, '', '/messages');
     }
 
-    function startPolling() {
-        stopPolling();
-        pollingInterval = setInterval(async () => {
-            if (currentOtherHandle) {
-                await refreshCurrentConversation();
-            }
-        }, 10000); // Poll every 10 seconds
-    }
-
-    function stopPolling() {
-        if (pollingInterval) {
-            clearInterval(pollingInterval);
-            pollingInterval = null;
-        }
-    }
-
     async function refreshCurrentConversation() {
         if (!currentOtherHandle) return;
 
@@ -758,8 +797,8 @@
             const data = await response.json();
             conversationState = {
                 is_connected: data.is_connected,
-                pending_claim_from_them: data.pending_claim_from_them,
-                pending_claim_from_me: conversationState?.pending_claim_from_me || false
+                pending_request_from_them: data.pending_request_from_them,
+                pending_request_from_me: conversationState?.pending_request_from_me || false
             };
 
             // Update messages without scroll jump if user hasn't scrolled
@@ -791,7 +830,7 @@
         try {
             const [unreadResponse, pendingResponse] = await Promise.all([
                 fetch('/api/messages/unread-count', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/messages/pending-claims-count', { headers: { 'Authorization': `Bearer ${token}` } })
+                fetch('/api/messages/pending-requests-count', { headers: { 'Authorization': `Bearer ${token}` } })
             ]);
 
             let totalBadge = 0;
