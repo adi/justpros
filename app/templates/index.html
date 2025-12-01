@@ -108,9 +108,21 @@
     let currentPostId = null; // For modal
     let deletePostId = null; // For delete confirmation
 
+    function isTokenValid(token) {
+        if (!token) return false;
+        try {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const payload = JSON.parse(window.atob(base64));
+            return payload && payload.exp * 1000 > Date.now();
+        } catch (e) {
+            return false;
+        }
+    }
+
     async function init() {
         const token = localStorage.getItem('token');
-        const isLoggedIn = await checkAuth();
+        const isLoggedIn = isTokenValid(token);
 
         if (isLoggedIn) {
             document.getElementById('guest-landing').classList.add('hidden');
