@@ -53,6 +53,10 @@ class PasswordChange(BaseModel):
         return v
 
 
+class NotificationSettings(BaseModel):
+    notify_mentions: bool
+
+
 @router.get("/handle/check")
 @rate_limit(max_requests=10, window_seconds=60)
 async def check_handle_availability(
@@ -327,6 +331,39 @@ async def delete_my_cover(
     )
 
     return {"message": "Cover deleted"}
+
+
+@router.get("/me/notifications")
+async def get_notification_settings(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Get notification settings."""
+    user_id = current_user["id"]
+
+    user = await database.fetch_one(
+        "SELECT notify_mentions FROM users WHERE id = :id",
+        {"id": user_id},
+    )
+
+    return {
+        "notify_mentions": user["notify_mentions"] if user else False,
+    }
+
+
+@router.patch("/me/notifications")
+async def update_notification_settings(
+    payload: NotificationSettings,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Update notification settings."""
+    user_id = current_user["id"]
+
+    await database.execute(
+        "UPDATE users SET notify_mentions = :notify_mentions, updated_at = NOW() WHERE id = :id",
+        {"notify_mentions": payload.notify_mentions, "id": user_id},
+    )
+
+    return {"notify_mentions": payload.notify_mentions}
 
 
 @router.get("/search")

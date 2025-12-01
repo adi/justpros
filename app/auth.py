@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.db import database
@@ -69,4 +69,28 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+    return dict(user)
+
+
+async def get_optional_user(request: Request) -> dict | None:
+    """Get current user if authenticated, otherwise return None.
+
+    Useful for endpoints that behave differently for logged-in vs anonymous users.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+
+    token = auth_header[7:]  # Strip "Bearer " prefix
+    user_id = decode_access_token(token)
+    if user_id is None:
+        return None
+
+    user = await database.fetch_one(
+        "SELECT id, handle, email, first_name, middle_name, last_name, headline, avatar_path, cover_path, skills FROM users WHERE id = :id",
+        {"id": user_id},
+    )
+    if user is None:
+        return None
+
     return dict(user)

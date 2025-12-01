@@ -64,6 +64,20 @@
         </section>
 
         <section class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Notifications</h2>
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="font-medium text-gray-900">Mention notifications</p>
+                    <p class="text-sm text-gray-500">Get notified when someone @mentions you in a post or comment</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="notify_mentions" class="sr-only peer" onchange="toggleNotifyMentions()">
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-blue rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-blue"></div>
+                </label>
+            </div>
+        </section>
+
+        <section class="bg-white rounded-lg shadow p-6">
             <h2 class="text-xl font-semibold text-gray-900 mb-4">Export Your Data</h2>
             <p class="text-gray-600 mb-4">Download a copy of all your data in JSON format.</p>
             <button
@@ -273,11 +287,68 @@
         }
     });
 
+    async function toggleNotifyMentions() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        const checkbox = document.getElementById('notify_mentions');
+        const newValue = checkbox.checked;
+
+        try {
+            const response = await fetch('/api/me/notifications', {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ notify_mentions: newValue })
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+                return;
+            }
+
+            if (!response.ok) {
+                // Revert checkbox on error
+                checkbox.checked = !newValue;
+                const data = await response.json();
+                alert(data.detail || 'Failed to update setting');
+            }
+        } catch (error) {
+            checkbox.checked = !newValue;
+            alert('Failed to update setting. Please try again.');
+        }
+    }
+
+    async function loadNotificationSettings() {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        try {
+            const response = await fetch('/api/me/notifications', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                document.getElementById('notify_mentions').checked = data.notify_mentions || false;
+            }
+        } catch (error) {
+            console.error('Failed to load notification settings:', error);
+        }
+    }
+
     // Redirect if not logged in, otherwise load account
     if (!localStorage.getItem('token')) {
         window.location.href = '/login';
     } else {
         loadAccount();
+        loadNotificationSettings();
     }
 </script>
 {% endblock %}
