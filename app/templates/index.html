@@ -3,24 +3,32 @@
 {% block content %}
 <div class="max-w-2xl mx-auto">
     <!-- Post Composer (shown when logged in) -->
-    <div id="composer" class="hidden bg-white rounded-lg shadow p-4 mb-4">
-        <form id="post-form">
-            <textarea id="post-content" rows="3" maxlength="2000"
-                placeholder="What's on your mind?"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"></textarea>
-            <div class="flex items-center justify-between mt-3">
-                <div class="flex items-center gap-2">
-                    <select id="post-visibility" class="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-blue">
-                        <option value="connections">Connections only</option>
-                        <option value="public">Public</option>
-                    </select>
-                    <span id="post-chars" class="text-xs text-gray-500">0/2000</span>
+    <div id="composer" class="hidden bg-white rounded-lg shadow mb-4">
+        <!-- Collapsed state: single input -->
+        <div id="composer-collapsed" class="p-3 cursor-text" onclick="expandComposer()">
+            <input type="text" readonly placeholder="What's on your mind?"
+                class="w-full px-3 py-2 bg-gray-100 rounded-full text-gray-500 cursor-text">
+        </div>
+        <!-- Expanded state: full form -->
+        <div id="composer-expanded" class="hidden p-4">
+            <form id="post-form">
+                <textarea id="post-content" rows="3" maxlength="2000"
+                    placeholder="What's on your mind?"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"></textarea>
+                <div class="flex items-center justify-between mt-3">
+                    <div class="flex items-center gap-2">
+                        <select id="post-visibility" class="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                            <option value="connections">Connections only</option>
+                            <option value="public">Public</option>
+                        </select>
+                        <span id="post-chars" class="text-xs text-gray-500">0/2000</span>
+                    </div>
+                    <button type="submit" class="px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 disabled:opacity-50">
+                        Post
+                    </button>
                 </div>
-                <button type="submit" class="px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 disabled:opacity-50">
-                    Post
-                </button>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 
     <!-- Landing for guests -->
@@ -273,7 +281,7 @@
                     </a>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <a href="${authorUrl}" class="font-medium text-gray-900 hover:underline">${escapeHtml(post.author.name || post.author.handle)}</a>
+                            <a href="${authorUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.author.name || post.author.handle)}</a>
                             <span class="text-gray-400">@${post.author.handle}</span>
                             ${visibilityIcon}
                             <span class="text-gray-400 text-sm">${timeStr}</span>
@@ -348,6 +356,29 @@
         });
     }
 
+    // Composer expand/collapse
+    function expandComposer() {
+        document.getElementById('composer-collapsed').classList.add('hidden');
+        document.getElementById('composer-expanded').classList.remove('hidden');
+        document.getElementById('post-content').focus();
+    }
+
+    function collapseComposer() {
+        const content = document.getElementById('post-content').value.trim();
+        if (content) return; // Don't collapse if there's content
+        document.getElementById('composer-expanded').classList.add('hidden');
+        document.getElementById('composer-collapsed').classList.remove('hidden');
+    }
+
+    // Collapse when clicking outside composer
+    document.addEventListener('click', (e) => {
+        const composer = document.getElementById('composer');
+        const expanded = document.getElementById('composer-expanded');
+        if (!composer.contains(e.target) && !expanded.classList.contains('hidden')) {
+            collapseComposer();
+        }
+    });
+
     // Post form
     document.getElementById('post-content').addEventListener('input', (e) => {
         document.getElementById('post-chars').textContent = `${e.target.value.length}/2000`;
@@ -379,6 +410,7 @@
             if (response.ok) {
                 document.getElementById('post-content').value = '';
                 document.getElementById('post-chars').textContent = '0/2000';
+                collapseComposer();
                 // Reload feed to show new post
                 lastPostId = null;
                 hasMore = true;
@@ -529,7 +561,7 @@
                 </a>
                 <div class="flex-1 bg-gray-50 rounded-lg p-3">
                     <div class="flex items-center gap-2 flex-wrap text-sm">
-                        <a href="${authorUrl}" class="font-medium text-gray-900 hover:underline">${escapeHtml(comment.author.name || comment.author.handle)}</a>
+                        <a href="${authorUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(comment.author.name || comment.author.handle)}</a>
                         <span class="text-gray-400">${timeStr}</span>
                         ${deleteButton}
                     </div>
