@@ -5,36 +5,40 @@
     <!-- Post Composer (shown when logged in) -->
     <div id="composer" class="hidden bg-white rounded-lg shadow mb-4">
         <!-- Collapsed state: single input -->
-        <div id="composer-collapsed" class="p-3 cursor-text" onclick="expandComposer()">
+        <div id="composer-collapsed" class="p-3 cursor-text flex items-center gap-3" onclick="expandComposer()">
+            <img id="composer-avatar-collapsed" src="/static/default-avatar.svg" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200 flex-shrink-0">
             <input type="text" readonly placeholder="What's on your mind?"
                 class="w-full px-3 py-2 bg-gray-100 rounded-full text-gray-500 cursor-text">
         </div>
         <!-- Expanded state: full form -->
         <div id="composer-expanded" class="hidden p-4">
-            <form id="post-form">
-                <div class="relative">
-                    <textarea id="post-content" rows="3" maxlength="2000"
-                        placeholder="What's on your mind?"
-                        class="w-full px-3 py-2 pr-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"></textarea>
-                    <button type="button" onclick="cancelComposer()" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
-                </div>
-                <div class="flex items-center justify-between mt-3">
-                    <div class="flex items-center gap-2">
-                        <select id="post-visibility" class="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-blue">
-                            <option value="connections">Connections only</option>
-                            <option value="public">Public</option>
-                        </select>
-                        <span id="post-chars" class="text-xs text-gray-500">0/2000</span>
+            <div class="flex items-start gap-3">
+                <img id="composer-avatar-expanded" src="/static/default-avatar.svg" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200 flex-shrink-0">
+                <form id="post-form" class="flex-1">
+                    <div class="relative">
+                        <textarea id="post-content" rows="9" maxlength="2000"
+                            placeholder="What's on your mind?"
+                            class="w-full px-3 py-2 pr-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"></textarea>
+                        <button type="button" onclick="cancelComposer()" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
                     </div>
-                    <button type="submit" class="px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 disabled:opacity-50">
-                        Post
-                    </button>
-                </div>
-            </form>
+                    <div class="flex items-center justify-between mt-3">
+                        <div class="flex items-center gap-2">
+                            <select id="post-visibility" class="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                                <option value="connections">Connections only</option>
+                                <option value="public">Public</option>
+                            </select>
+                            <span id="post-chars" class="text-xs text-gray-500">0/2000</span>
+                        </div>
+                        <button type="submit" class="px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 disabled:opacity-50">
+                            Post
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -123,6 +127,22 @@
     let currentPostId = null; // For modal
     let deletePostId = null; // For delete confirmation
 
+    const composerPlaceholders = [
+        "What's on your mind?",
+        "Share something!",
+        "What are you working on?",
+        "Got something to share?",
+        "What's new with you?",
+        "Share an update...",
+        "What have you learned lately?",
+        "Any wins to celebrate?",
+        "What's inspiring you today?",
+    ];
+
+    function getRandomPlaceholder() {
+        return composerPlaceholders[Math.floor(Math.random() * composerPlaceholders.length)];
+    }
+
     function isTokenValid(token) {
         if (!token) return false;
         try {
@@ -145,7 +165,12 @@
             document.getElementById('feed-tabs').classList.remove('hidden');
             document.getElementById('feed-container').classList.remove('hidden');
 
-            // Get current user ID
+            // Set random placeholder
+            const placeholder = getRandomPlaceholder();
+            document.querySelector('#composer-collapsed input').placeholder = placeholder;
+            document.getElementById('post-content').placeholder = placeholder;
+
+            // Get current user ID and avatar
             try {
                 const meResponse = await fetch('/api/me', {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -153,6 +178,11 @@
                 if (meResponse.ok) {
                     const me = await meResponse.json();
                     currentUserId = me.id;
+                    // Set composer avatars
+                    if (me.avatar_url) {
+                        document.getElementById('composer-avatar-collapsed').src = me.avatar_url;
+                        document.getElementById('composer-avatar-expanded').src = me.avatar_url;
+                    }
                 }
             } catch (e) {
                 console.error('Failed to get user:', e);
