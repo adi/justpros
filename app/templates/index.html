@@ -51,14 +51,6 @@
         </div>
     </div>
 
-    <!-- Landing for guests -->
-    <div id="guest-landing" class="flex flex-col items-center justify-center py-16 bg-white sm:rounded-lg shadow">
-        <img src="/static/logo.svg" alt="JustPros" class="w-48 h-48 mb-8">
-        <h1 class="text-3xl font-bold text-gray-900 mb-4">The clean professional network</h1>
-        <p class="text-gray-600 mb-8 text-center px-4">Show your work. Connect with real pros. No algorithmic nonsense.</p>
-        <a href="/signup" class="bg-brand-blue text-white px-6 py-3 rounded-md hover:opacity-90 text-lg">Get started</a>
-    </div>
-
     <!-- Filter Tabs (shown when logged in) -->
     <div id="feed-tabs" class="hidden flex border-b border-gray-200 bg-white sm:rounded-t-lg mb-0">
         <button onclick="switchFilter('all')" id="tab-all" class="flex-1 py-3 text-sm font-medium border-b-2 border-brand-blue text-brand-blue">
@@ -170,7 +162,6 @@
         const isLoggedIn = isTokenValid(token);
 
         if (isLoggedIn) {
-            document.getElementById('guest-landing').classList.add('hidden');
             document.getElementById('composer').classList.remove('hidden');
             document.getElementById('feed-tabs').classList.remove('hidden');
             document.getElementById('feed-container').classList.remove('hidden');
@@ -202,7 +193,6 @@
             setupInfiniteScroll();
         } else {
             // Show public posts for guests
-            document.getElementById('guest-landing').classList.remove('hidden');
             document.getElementById('feed-container').classList.remove('hidden');
             document.getElementById('feed-tabs').classList.add('hidden');
             await loadPosts();
