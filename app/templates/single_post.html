@@ -1,0 +1,704 @@
+{% extends "base.html" %}
+
+{% block title %}{{ author_name or handle }} on JustPros{% endblock %}
+{% block description %}{{ og_description or 'Post on JustPros' }}{% endblock %}
+{% block og_title %}{{ author_name or handle }} on JustPros{% endblock %}
+{% block og_description %}{{ og_description or 'Post on JustPros' }}{% endblock %}
+{% if og_image %}{% block og_image %}{{ og_image }}{% endblock %}{% endif %}
+{% block og_url %}/u/{{ handle }}/post/{{ post_id }}{% endblock %}
+{% block twitter_title %}{{ author_name or handle }} on JustPros{% endblock %}
+{% block twitter_description %}{{ og_description or 'Post on JustPros' }}{% endblock %}
+{% if og_image %}{% block twitter_image %}{{ og_image }}{% endblock %}{% endif %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <!-- Go to feed link -->
+    <div class="mb-2 px-4 sm:px-0">
+        <a href="/" class="text-brand-blue hover:underline text-sm flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+            Go to feed
+        </a>
+    </div>
+
+    <!-- Post Container -->
+    <div id="post-container">
+        <div class="py-8 text-center text-gray-500">Loading...</div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="delete-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-6">
+        <h3 class="text-lg font-semibold mb-4">Delete Post?</h3>
+        <p class="text-gray-600 mb-6">This will permanently delete this post and all its comments.</p>
+        <div class="flex justify-end gap-3">
+            <button onclick="hideDeleteModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                Cancel
+            </button>
+            <button onclick="confirmDelete()" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+                Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const POST_ID = {{ post_id }};
+    const HANDLE = '{{ handle }}';
+    let loadedComments = {};
+    let replyingTo = {};
+    let deletePostId = null;
+    let deleteRootPostId = null;
+    const COMMENT_TRUNCATE_LENGTH = 280;
+
+    async function init() {
+        await loadPost();
+    }
+
+    async function loadPost() {
+        const token = localStorage.getItem('token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+        try {
+            const response = await fetch(`/api/posts/${POST_ID}`, { headers });
+
+            if (response.status === 404) {
+                document.getElementById('post-container').innerHTML = `
+                    <div class="bg-white sm:rounded-lg shadow p-8 text-center">
+                        <p class="text-gray-500">Post not found</p>
+                        <a href="/" class="text-brand-blue hover:underline mt-2 inline-block">Go to feed</a>
+                    </div>
+                `;
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error('Failed to load post');
+            }
+
+            const data = await response.json();
+            loadedComments[POST_ID] = data.comments;
+            renderPost(data.post, data.comments);
+        } catch (e) {
+            console.error('Failed to load post:', e);
+            document.getElementById('post-container').innerHTML = `
+                <div class="bg-white sm:rounded-lg shadow p-8 text-center">
+                    <p class="text-gray-500">Failed to load post</p>
+                    <a href="/" class="text-brand-blue hover:underline mt-2 inline-block">Go to feed</a>
+                </div>
+            `;
+        }
+    }
+
+    function renderPost(post, comments) {
+        const authorUrl = `/u/${post.author.handle}`;
+        const avatarUrl = post.author.avatar_url || '/static/default-avatar.svg';
+        const timeStr = formatTime(post.created_at);
+
+        const upvoteActive = post.user_vote === 1 ? 'text-green-600 font-semibold' : 'text-gray-500';
+        const downvoteActive = post.user_vote === -1 ? 'text-red-600 font-semibold' : 'text-gray-500';
+
+        const token = localStorage.getItem('token');
+        const canVote = token && !post.is_mine;
+        const voteButtonClass = canVote ? 'hover:opacity-70 cursor-pointer' : 'cursor-default';
+
+        const visibilityIcon = post.visibility === 'public'
+            ? `<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Public">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+               </svg>`
+            : `<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Connections only">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+               </svg>`;
+
+        // Three dots menu for posts
+        const postMenuItems = [];
+        postMenuItems.push(`<button onclick="sharePost(${post.id}, '${post.author.handle}'); closePostMenu(${post.id})" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Share</button>`);
+        if (token && !post.is_mine) {
+            postMenuItems.push(`<button onclick="reportAbuse(${post.id}); closePostMenu(${post.id})" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Report Abuse</button>`);
+        }
+        if (post.is_mine) {
+            postMenuItems.push(`<button onclick="showDeleteModal(${post.id}); closePostMenu(${post.id})" class="w-full text-left px-4 py-2 text-red-600 hover:bg-gray-100">Delete</button>`);
+        }
+
+        const postMenu = `
+            <div class="relative ml-auto">
+                <button onclick="togglePostMenu(${post.id}, event)" class="text-gray-400 hover:text-gray-600 p-1">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                    </svg>
+                </button>
+                <div id="post-menu-${post.id}" class="hidden absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    ${postMenuItems.join('')}
+                </div>
+            </div>
+        `;
+
+        const commentsHtml = renderCommentsSection(POST_ID, comments);
+
+        document.getElementById('post-container').innerHTML = `
+            <div class="bg-white sm:rounded-lg shadow" data-post-id="${post.id}">
+                <div class="p-4">
+                    <div class="flex items-start gap-3">
+                        <a href="${authorUrl}">
+                            <img src="${avatarUrl}" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200">
+                        </a>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <a href="${authorUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.author.name || post.author.handle)}</a>
+                                <span class="text-gray-400">@${post.author.handle}</span>
+                                ${visibilityIcon}
+                                <span class="text-gray-400 text-sm">${timeStr}</span>
+                                ${postMenu}
+                            </div>
+                            <p class="text-gray-800 mt-2 whitespace-pre-wrap break-words">${formatContent(post.content)}</p>
+                        </div>
+                    </div>
+                    ${renderPostMedia(post.media)}
+                    <div class="flex items-center gap-4 mt-3 text-sm">
+                        <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, 1, event)"` : ''}>
+                            <span class="${upvoteActive}">&#128077;</span>
+                            <span id="upvotes-${post.id}" class="${upvoteActive}">${post.upvote_count}</span>
+                        </div>
+                        <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, -1, event)"` : ''}>
+                            <span class="${downvoteActive}">&#128078;</span>
+                            <span id="downvotes-${post.id}" class="${downvoteActive}">${post.downvote_count}</span>
+                        </div>
+                        <div class="flex items-center gap-1 text-gray-500">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                            <span id="comment-count-${post.id}">${post.comment_count}</span>
+                        </div>
+                    </div>
+                </div>
+                <div id="comments-section-${post.id}" class="border-t border-gray-100">
+                    ${commentsHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    function renderCommentsSection(postId, comments) {
+        const token = localStorage.getItem('token');
+        let html = '<div class="divide-y divide-gray-100">';
+
+        if (comments.length === 0) {
+            html += '<div class="p-4 text-center text-gray-500 text-sm">No comments yet</div>';
+        } else {
+            comments.forEach(comment => {
+                html += renderComment(comment, postId, comments);
+            });
+        }
+
+        html += '</div>';
+
+        // Reply form
+        if (token) {
+            html += `
+                <div class="p-3 border-t border-gray-100">
+                    <div id="reply-indicator-${postId}" class="hidden text-xs text-brand-blue mb-2 flex items-center"></div>
+                    <form onsubmit="submitReply(event, ${postId})" class="flex gap-2">
+                        <input type="text" id="reply-input-${postId}" placeholder="Write a comment..." maxlength="2000"
+                            class="flex-1 px-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                        <button type="submit" class="px-4 py-2 bg-brand-blue text-white rounded-full hover:opacity-90 text-sm">
+                            Reply
+                        </button>
+                    </form>
+                </div>
+            `;
+        }
+
+        return html;
+    }
+
+    function renderComment(comment, rootPostId, allComments) {
+        const authorUrl = `/u/${comment.author.handle}`;
+        const avatarUrl = comment.author.avatar_url || '/static/default-avatar.svg';
+        const timeStr = formatTime(comment.created_at);
+
+        const upvoteActive = comment.user_vote === 1 ? 'text-green-600 font-semibold' : 'text-gray-500';
+        const downvoteActive = comment.user_vote === -1 ? 'text-red-600 font-semibold' : 'text-gray-500';
+
+        const token = localStorage.getItem('token');
+        const canVote = token && !comment.is_mine;
+        const voteButtonClass = canVote ? 'hover:opacity-70 cursor-pointer' : 'cursor-default';
+
+        // Three dots menu with Delete (if own) and Report Abuse
+        const menuItems = [];
+        if (comment.is_mine) {
+            menuItems.push(`<button onclick="showDeleteModal(${comment.id}, ${rootPostId}); closeCommentMenu(${comment.id})" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Delete</button>`);
+        }
+        if (token && !comment.is_mine) {
+            menuItems.push(`<button onclick="reportAbuse(${comment.id}); closeCommentMenu(${comment.id})" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Report Abuse</button>`);
+        }
+
+        const commentMenu = menuItems.length > 0 ? `
+            <div class="relative ml-auto">
+                <button onclick="toggleCommentMenu(${comment.id}, event)" class="text-gray-400 hover:text-gray-600 p-1">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                    </svg>
+                </button>
+                <div id="comment-menu-${comment.id}" class="hidden absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    ${menuItems.join('')}
+                </div>
+            </div>
+        ` : '';
+
+        // Check if this is a reply to another comment (not the root post)
+        let replyToButton = '';
+        if (comment.reply_to_id && comment.reply_to_id !== rootPostId) {
+            const parentComment = allComments.find(c => c.id === comment.reply_to_id);
+            if (parentComment) {
+                replyToButton = `<button onclick="scrollToComment(${comment.reply_to_id})" class="text-brand-blue hover:underline flex items-center justify-center w-6 h-6" title="Jump to parent comment">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 20h-8v-16M12 4l-4 4m4-4l4 4"/>
+                    </svg>
+                </button>`;
+            }
+        }
+
+        // Truncate long comments
+        const content = comment.content || '';
+        const isTruncated = content.length > COMMENT_TRUNCATE_LENGTH;
+        const displayContent = isTruncated ? content.substring(0, COMMENT_TRUNCATE_LENGTH) + '...' : content;
+        const showMoreButton = isTruncated
+            ? `<button onclick="expandComment(${comment.id})" class="text-brand-blue hover:underline text-xs" id="expand-btn-${comment.id}">show more</button>`
+            : '';
+
+        return `
+            <div class="p-3 hover:bg-gray-50" id="comment-${comment.id}" data-post-id="${comment.id}">
+                <div class="flex items-start gap-2">
+                    ${replyToButton ? `<div class="flex-shrink-0 pt-1">${replyToButton}</div>` : ''}
+                    <a href="${authorUrl}" class="flex-shrink-0">
+                        <img src="${avatarUrl}" alt="" class="w-8 h-8 rounded-full object-cover bg-gray-200">
+                    </a>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap text-sm">
+                            <a href="${authorUrl}" class="font-medium text-gray-900 hover:underline">${escapeHtml(comment.author.name || comment.author.handle)}</a>
+                            <span class="text-gray-400 text-xs">${timeStr}</span>
+                            ${commentMenu}
+                        </div>
+                        <p class="text-gray-800 mt-1 whitespace-pre-wrap break-words text-sm" id="content-${comment.id}" data-full="${escapeHtml(content)}">${formatContent(displayContent)}</p>
+                        ${showMoreButton}
+                        <div class="flex items-center gap-3 mt-2 text-xs">
+                            <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${comment.id}, 1, event)"` : ''}>
+                                <span class="${upvoteActive}">&#128077;</span>
+                                <span id="upvotes-${comment.id}" class="${upvoteActive}">${comment.upvote_count}</span>
+                            </div>
+                            <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${comment.id}, -1, event)"` : ''}>
+                                <span class="${downvoteActive}">&#128078;</span>
+                                <span id="downvotes-${comment.id}" class="${downvoteActive}">${comment.downvote_count}</span>
+                            </div>
+                            ${token ? `<button onclick="replyToComment(${rootPostId}, ${comment.id})" class="text-gray-500 hover:text-brand-blue">Reply</button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function formatContent(content) {
+        let escaped = escapeHtml(content);
+        escaped = escaped.replace(/@([a-z0-9_]{3,30})\b/g, '<a href="/u/$1" class="text-brand-blue hover:underline" onclick="event.stopPropagation()">@$1</a>');
+        return escaped;
+    }
+
+    function formatTime(isoString) {
+        if (!isoString) return '';
+        const date = new Date(isoString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'now';
+        if (diffMins < 60) return `${diffMins}m`;
+        if (diffHours < 24) return `${diffHours}h`;
+        if (diffDays < 7) return `${diffDays}d`;
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function renderPostMedia(media) {
+        if (!media || media.length === 0) return '';
+        const m = media[0];
+        if (m.type === 'video') {
+            return `<div class="mt-3 -mx-4"><video src="${m.url}" controls controlsList="nodownload noplaybackrate" disablePictureInPicture class="w-full" preload="metadata"></video></div>`;
+        }
+        return `<div class="mt-3 -mx-4"><img src="${m.url}" alt="" class="w-full cursor-pointer" onclick="openImageModal('${m.url}', event)"></div>`;
+    }
+
+    function openImageModal(url, event) {
+        event.stopPropagation();
+        const overlay = document.createElement('div');
+        overlay.id = 'image-modal';
+        overlay.className = 'fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[100] cursor-pointer';
+        overlay.onclick = () => overlay.remove();
+        overlay.innerHTML = `
+            <img src="${url}" class="max-w-full max-h-full object-contain">
+            <button class="absolute top-4 right-4 text-white text-3xl hover:text-gray-300">&times;</button>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    function expandComment(commentId) {
+        const contentEl = document.getElementById(`content-${commentId}`);
+        const expandBtn = document.getElementById(`expand-btn-${commentId}`);
+        if (contentEl && expandBtn) {
+            const fullContent = contentEl.dataset.full;
+            contentEl.innerHTML = formatContent(fullContent);
+            expandBtn.remove();
+        }
+    }
+
+    function scrollToComment(commentId) {
+        const commentEl = document.getElementById(`comment-${commentId}`);
+        if (commentEl) {
+            commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            commentEl.classList.add('bg-yellow-50');
+            setTimeout(() => {
+                commentEl.classList.remove('bg-yellow-50');
+            }, 1500);
+        }
+    }
+
+    // Voting
+    async function vote(postId, value, event) {
+        event.stopPropagation();
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const currentVote = document.getElementById(`upvotes-${postId}`)?.classList.contains('text-green-600') ? 1 :
+                               document.getElementById(`downvotes-${postId}`)?.classList.contains('text-red-600') ? -1 : 0;
+
+            let response;
+            if (currentVote === value) {
+                response = await fetch(`/api/posts/${postId}/vote`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+            } else {
+                response = await fetch(`/api/posts/${postId}/vote`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ value })
+                });
+            }
+
+            if (response.ok) {
+                const data = await response.json();
+                updateVoteDisplay(postId, data);
+            }
+        } catch (e) {
+            console.error('Failed to vote:', e);
+        }
+    }
+
+    function updateVoteDisplay(postId, data) {
+        const upvotesEl = document.getElementById(`upvotes-${postId}`);
+        const downvotesEl = document.getElementById(`downvotes-${postId}`);
+
+        if (upvotesEl) {
+            upvotesEl.textContent = data.upvote_count;
+            upvotesEl.className = data.user_vote === 1 ? 'text-green-600 font-semibold' : 'text-gray-500';
+            upvotesEl.previousElementSibling.className = data.user_vote === 1 ? 'text-green-600 font-semibold' : 'text-gray-500';
+        }
+        if (downvotesEl) {
+            downvotesEl.textContent = data.downvote_count;
+            downvotesEl.className = data.user_vote === -1 ? 'text-red-600 font-semibold' : 'text-gray-500';
+            downvotesEl.previousElementSibling.className = data.user_vote === -1 ? 'text-red-600 font-semibold' : 'text-gray-500';
+        }
+    }
+
+    // Comments
+    async function loadComments(postId) {
+        const token = localStorage.getItem('token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+        try {
+            const response = await fetch(`/api/posts/${postId}`, { headers });
+            if (!response.ok) return;
+
+            const data = await response.json();
+            loadedComments[postId] = data.comments;
+            const section = document.getElementById(`comments-section-${postId}`);
+            if (section) {
+                section.innerHTML = renderCommentsSection(postId, data.comments);
+            }
+        } catch (e) {
+            console.error('Failed to load comments:', e);
+        }
+    }
+
+    async function submitReply(event, rootPostId) {
+        event.preventDefault();
+
+        const input = document.getElementById(`reply-input-${rootPostId}`);
+        const content = input.value.trim();
+        if (!content) return;
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        const targetId = replyingTo[rootPostId] || rootPostId;
+
+        try {
+            const response = await fetch(`/api/posts/${targetId}/reply`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content })
+            });
+
+            if (response.ok) {
+                input.value = '';
+                delete replyingTo[rootPostId];
+                clearReplyIndicator(rootPostId);
+                delete loadedComments[rootPostId];
+                await loadComments(rootPostId);
+                const countEl = document.getElementById(`comment-count-${rootPostId}`);
+                if (countEl) {
+                    countEl.textContent = parseInt(countEl.textContent) + 1;
+                }
+            } else {
+                const error = await response.json();
+                alert(error.detail || 'Failed to post comment');
+            }
+        } catch (e) {
+            console.error('Failed to post comment:', e);
+            alert('Failed to post comment');
+        }
+    }
+
+    function replyToComment(rootPostId, commentId) {
+        replyingTo[rootPostId] = commentId;
+        const input = document.getElementById(`reply-input-${rootPostId}`);
+        if (input) {
+            input.focus();
+            showReplyIndicator(rootPostId);
+        }
+    }
+
+    function showReplyIndicator(rootPostId) {
+        const indicator = document.getElementById(`reply-indicator-${rootPostId}`);
+        if (indicator) {
+            indicator.innerHTML = `Replying <button onclick="cancelReplyTo(${rootPostId})" class="text-gray-400 hover:text-gray-600 ml-1">&times;</button>`;
+            indicator.classList.remove('hidden');
+        }
+    }
+
+    function clearReplyIndicator(rootPostId) {
+        const indicator = document.getElementById(`reply-indicator-${rootPostId}`);
+        if (indicator) {
+            indicator.classList.add('hidden');
+            indicator.innerHTML = '';
+        }
+    }
+
+    function cancelReplyTo(rootPostId) {
+        delete replyingTo[rootPostId];
+        clearReplyIndicator(rootPostId);
+        const input = document.getElementById(`reply-input-${rootPostId}`);
+        if (input) {
+            input.value = '';
+        }
+    }
+
+    // Delete modal
+    function showDeleteModal(postId, rootPostId = null) {
+        deletePostId = postId;
+        deleteRootPostId = rootPostId;
+        document.getElementById('delete-modal').classList.remove('hidden');
+    }
+
+    function hideDeleteModal() {
+        deletePostId = null;
+        deleteRootPostId = null;
+        document.getElementById('delete-modal').classList.add('hidden');
+    }
+
+    async function confirmDelete() {
+        if (!deletePostId) return;
+
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        try {
+            const response = await fetch(`/api/posts/${deletePostId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                const wasComment = deleteRootPostId !== null;
+                const rootId = deleteRootPostId;
+                hideDeleteModal();
+
+                if (wasComment && rootId) {
+                    delete loadedComments[rootId];
+                    await loadComments(rootId);
+                    const countEl = document.getElementById(`comment-count-${rootId}`);
+                    if (countEl) {
+                        countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
+                    }
+                } else {
+                    // Post itself was deleted, go back to feed
+                    window.location.href = '/';
+                }
+            } else {
+                const error = await response.json();
+                alert(error.detail || 'Failed to delete');
+            }
+        } catch (e) {
+            console.error('Failed to delete:', e);
+            alert('Failed to delete');
+        }
+    }
+
+    // Menus
+    function toggleCommentMenu(commentId, event) {
+        event.stopPropagation();
+        document.querySelectorAll('[id^="comment-menu-"]').forEach(menu => {
+            if (menu.id !== `comment-menu-${commentId}`) {
+                menu.classList.add('hidden');
+            }
+        });
+        const menu = document.getElementById(`comment-menu-${commentId}`);
+        if (menu) {
+            menu.classList.toggle('hidden');
+        }
+    }
+
+    function closeCommentMenu(commentId) {
+        const menu = document.getElementById(`comment-menu-${commentId}`);
+        if (menu) {
+            menu.classList.add('hidden');
+        }
+    }
+
+    function togglePostMenu(postId, event) {
+        event.stopPropagation();
+        document.querySelectorAll('[id^="post-menu-"], [id^="comment-menu-"]').forEach(menu => {
+            if (menu.id !== `post-menu-${postId}`) {
+                menu.classList.add('hidden');
+            }
+        });
+        const menu = document.getElementById(`post-menu-${postId}`);
+        if (menu) {
+            menu.classList.toggle('hidden');
+        }
+    }
+
+    function closePostMenu(postId) {
+        const menu = document.getElementById(`post-menu-${postId}`);
+        if (menu) {
+            menu.classList.add('hidden');
+        }
+    }
+
+    function sharePost(postId, authorHandle) {
+        const url = `${window.location.origin}/u/${authorHandle}/post/${postId}`;
+        if (navigator.share) {
+            navigator.share({
+                title: 'Post on JustPros',
+                url: url
+            }).catch(() => {
+                copyToClipboard(url);
+            });
+        } else {
+            copyToClipboard(url);
+        }
+    }
+
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            alert('Link copied to clipboard!');
+        }).catch(() => {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            alert('Link copied to clipboard!');
+        });
+    }
+
+    async function reportAbuse(postId) {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        if (!confirm('Report this content for abuse? Our team will review it.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/posts/${postId}/report`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                alert('Report submitted. Thank you for helping keep JustPros clean.');
+            } else {
+                const error = await response.json();
+                alert(error.detail || 'Failed to submit report');
+            }
+        } catch (e) {
+            console.error('Failed to report:', e);
+            alert('Failed to submit report');
+        }
+    }
+
+    // Close menus when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('[id^="comment-menu-"]') && !e.target.closest('[id^="post-menu-"]') && !e.target.closest('button')) {
+            document.querySelectorAll('[id^="comment-menu-"], [id^="post-menu-"]').forEach(menu => {
+                menu.classList.add('hidden');
+            });
+        }
+    });
+
+    // ESC key to close modals
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('[id^="comment-menu-"], [id^="post-menu-"]').forEach(menu => {
+                menu.classList.add('hidden');
+            });
+            const imageModal = document.getElementById('image-modal');
+            if (imageModal) {
+                imageModal.remove();
+            } else if (!document.getElementById('delete-modal').classList.contains('hidden')) {
+                hideDeleteModal();
+            }
+        }
+    });
+
+    init();
+</script>
+{% endblock %}

@@ -61,6 +61,44 @@ async def messages_conversation_page(request: Request, handle: str) -> HTMLRespo
     )
 
 
+@router.api_route("/u/{handle}/post/{post_id}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def single_post_page(request: Request, handle: str, post_id: int) -> HTMLResponse:
+    """Single post view with comments - for shared post links."""
+    # Fetch post data for OG meta tags
+    post = await database.fetch_one(
+        """
+        SELECT p.content, u.handle, u.first_name, u.middle_name, u.last_name, u.avatar_path
+        FROM posts p
+        JOIN users u ON u.id = p.author_id
+        WHERE p.id = :post_id AND p.reply_to_id IS NULL
+        """,
+        {"post_id": post_id},
+    )
+
+    context = {"handle": handle, "post_id": post_id}
+
+    if post:
+        first_name = post["first_name"] or ""
+        middle_name = post["middle_name"]
+        last_name = post["last_name"] or ""
+        full_name = (
+            f"{first_name} {middle_name} {last_name}".replace("  ", " ").strip()
+            if middle_name
+            else f"{first_name} {last_name}".strip()
+        )
+        context["author_name"] = full_name or post["handle"]
+        # Truncate content for OG description
+        content = post["content"] or ""
+        context["og_description"] = content[:200] + "..." if len(content) > 200 else content
+        context["og_image"] = (
+            get_avatar_url(post["avatar_path"]) if post["avatar_path"] else None
+        )
+
+    return request.app.state.templates.TemplateResponse(
+        request, "single_post.html", context
+    )
+
+
 @router.api_route("/u/{handle}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def public_profile_page(request: Request, handle: str) -> HTMLResponse:
     # Fetch user data for OG meta tags

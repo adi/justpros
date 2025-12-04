@@ -733,8 +733,8 @@ async def create_reply(
         },
     )
 
-    # Update comment count on parent
-    await update_comment_count(post_id)
+    # Update comment count on root post
+    await update_comment_count(root_post_id)
 
     # Process @mentions
     await process_mentions(payload.content, user_id)
@@ -754,7 +754,7 @@ async def delete_post(
     user_id = current_user["id"]
 
     post = await database.fetch_one(
-        "SELECT id, author_id, reply_to_id FROM posts WHERE id = :post_id",
+        "SELECT id, author_id, reply_to_id, root_post_id FROM posts WHERE id = :post_id",
         {"post_id": post_id},
     )
 
@@ -764,7 +764,7 @@ async def delete_post(
     if post["author_id"] != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only delete your own posts")
 
-    parent_id = post["reply_to_id"]
+    root_post_id = post["root_post_id"]
 
     # Delete media from storage before database cascade deletes them
     media_paths = await database.fetch_all(
@@ -777,9 +777,9 @@ async def delete_post(
     # Delete the post (cascade will handle children and post_media records)
     await database.execute("DELETE FROM posts WHERE id = :post_id", {"post_id": post_id})
 
-    # Update parent's comment count if this was a reply
-    if parent_id:
-        await update_comment_count(parent_id)
+    # Update root post's comment count if this was a comment
+    if root_post_id:
+        await update_comment_count(root_post_id)
 
     return {"deleted": True}
 
