@@ -42,7 +42,7 @@
                             </select>
                             <span id="post-chars" class="text-xs text-gray-500">0/2000</span>
                         </div>
-                        <button type="submit" class="px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 disabled:opacity-50">
+                        <button type="submit" id="post-submit" disabled class="px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
                             Post
                         </button>
                     </div>
@@ -497,6 +497,7 @@
         if (pendingMedia.length === 0) {
             container.classList.add('hidden');
             container.innerHTML = '';
+            updatePostButtonState();
             return;
         }
 
@@ -517,6 +518,7 @@
                 </div>
             `;
         }).join('');
+        updatePostButtonState();
     }
 
     function removePendingMedia(index) {
@@ -528,6 +530,7 @@
         pendingMedia = [];
         document.getElementById('media-preview').classList.add('hidden');
         document.getElementById('media-preview').innerHTML = '';
+        updatePostButtonState();
     }
 
     async function uploadMediaForPost(postId, token) {
@@ -579,8 +582,16 @@
     });
 
     // Post form
+    function updatePostButtonState() {
+        const content = document.getElementById('post-content').value.trim();
+        const hasContent = content.length > 0;
+        const hasMedia = pendingMedia.length > 0;
+        document.getElementById('post-submit').disabled = !hasContent && !hasMedia;
+    }
+
     document.getElementById('post-content').addEventListener('input', (e) => {
         document.getElementById('post-chars').textContent = `${e.target.value.length}/2000`;
+        updatePostButtonState();
     });
 
     document.getElementById('post-form').addEventListener('submit', async (e) => {
@@ -624,7 +635,8 @@
                 await loadPosts();
             } else {
                 const error = await response.json();
-                alert(error.detail || 'Failed to create post');
+                const message = typeof error.detail === 'string' ? error.detail : 'Failed to create post';
+                alert(message);
             }
         } catch (e) {
             console.error('Failed to create post:', e);
