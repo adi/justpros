@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 
 from app.auth import get_current_user, hash_password, verify_password
@@ -9,10 +9,10 @@ from app.ratelimit import rate_limit
 from app.storage import (
     delete_avatar,
     delete_cover,
+    generate_avatar_upload_url,
+    generate_cover_upload_url,
     get_avatar_url,
     get_cover_url,
-    upload_avatar,
-    upload_cover,
 )
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -55,6 +55,50 @@ class PasswordChange(BaseModel):
 
 class NotificationSettings(BaseModel):
     notify_mentions: bool
+
+
+class AvatarUploadUrlRequest(BaseModel):
+    content_type: str
+
+    @field_validator("content_type")
+    @classmethod
+    def validate_content_type(cls, v: str) -> str:
+        if v not in ("image/jpeg", "image/png", "image/webp"):
+            raise ValueError("Only JPEG, PNG, or WebP allowed")
+        return v
+
+
+class AvatarConfirmRequest(BaseModel):
+    media_path: str
+
+    @field_validator("media_path")
+    @classmethod
+    def validate_media_path(cls, v: str) -> str:
+        if not v.startswith("avatars/") or not any(v.endswith(ext) for ext in (".jpg", ".png", ".webp")):
+            raise ValueError("Invalid media path")
+        return v
+
+
+class CoverUploadUrlRequest(BaseModel):
+    content_type: str
+
+    @field_validator("content_type")
+    @classmethod
+    def validate_content_type(cls, v: str) -> str:
+        if v not in ("image/jpeg", "image/png", "image/webp"):
+            raise ValueError("Only JPEG, PNG, or WebP allowed")
+        return v
+
+
+class CoverConfirmRequest(BaseModel):
+    media_path: str
+
+    @field_validator("media_path")
+    @classmethod
+    def validate_media_path(cls, v: str) -> str:
+        if not v.startswith("covers/") or not any(v.endswith(ext) for ext in (".jpg", ".png", ".webp")):
+            raise ValueError("Invalid media path")
+        return v
 
 
 @router.get("/handle/check")
@@ -198,39 +242,34 @@ async def delete_my_account(current_user: dict = Depends(get_current_user)) -> d
     return {"message": "Account deleted"}
 
 
-@router.post("/me/avatar")
-async def upload_my_avatar(
-    file: UploadFile,
+@router.post("/me/avatar/upload-url")
+async def get_avatar_upload_url(
+    payload: AvatarUploadUrlRequest,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Upload avatar image."""
-    content_type = file.content_type
-    if content_type not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only JPEG, PNG, or WebP allowed",
-        )
+    """Get presigned URL for direct avatar upload to R2."""
+    result = generate_avatar_upload_url(current_user["id"], payload.content_type)
+    return {"upload_url": result["upload_url"], "media_path": result["media_path"]}
 
-    contents = await file.read()
-    if len(contents) > 2 * 1024 * 1024:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File too large (max 2MB)",
-        )
 
+@router.post("/me/avatar/confirm")
+async def confirm_avatar_upload(
+    payload: AvatarConfirmRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Confirm avatar upload after direct R2 upload."""
     old_avatar_path = current_user["avatar_path"]
-    avatar_path = upload_avatar(current_user["id"], contents, content_type)  # type: ignore[arg-type]
 
-    # Delete old avatar only after successful upload
+    # Delete old avatar only after confirming new one
     if old_avatar_path:
         delete_avatar(old_avatar_path)
 
     await database.execute(
         "UPDATE users SET avatar_path = :path, updated_at = NOW() WHERE id = :id",
-        {"path": avatar_path, "id": current_user["id"]},
+        {"path": payload.media_path, "id": current_user["id"]},
     )
 
-    return {"avatar_url": get_avatar_url(avatar_path)}
+    return {"avatar_url": get_avatar_url(payload.media_path)}
 
 
 @router.delete("/me/avatar")
@@ -282,39 +321,34 @@ async def change_my_password(
     return {"message": "Password changed"}
 
 
-@router.post("/me/cover")
-async def upload_my_cover(
-    file: UploadFile,
+@router.post("/me/cover/upload-url")
+async def get_cover_upload_url(
+    payload: CoverUploadUrlRequest,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Upload cover image."""
-    content_type = file.content_type
-    if content_type not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only JPEG, PNG, or WebP allowed",
-        )
+    """Get presigned URL for direct cover upload to R2."""
+    result = generate_cover_upload_url(current_user["id"], payload.content_type)
+    return {"upload_url": result["upload_url"], "media_path": result["media_path"]}
 
-    contents = await file.read()
-    if len(contents) > 5 * 1024 * 1024:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File too large (max 5MB)",
-        )
 
+@router.post("/me/cover/confirm")
+async def confirm_cover_upload(
+    payload: CoverConfirmRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Confirm cover upload after direct R2 upload."""
     old_cover_path = current_user["cover_path"]
-    cover_path = upload_cover(current_user["id"], contents, content_type)  # type: ignore[arg-type]
 
-    # Delete old cover only after successful upload
+    # Delete old cover only after confirming new one
     if old_cover_path:
         delete_cover(old_cover_path)
 
     await database.execute(
         "UPDATE users SET cover_path = :path, updated_at = NOW() WHERE id = :id",
-        {"path": cover_path, "id": current_user["id"]},
+        {"path": payload.media_path, "id": current_user["id"]},
     )
 
-    return {"cover_url": get_cover_url(cover_path)}
+    return {"cover_url": get_cover_url(payload.media_path)}
 
 
 @router.delete("/me/cover")

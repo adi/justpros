@@ -33,22 +33,6 @@ def _hash_user_id(user_id: int) -> str:
     return hashlib.blake2b(data, key=secret, digest_size=16).hexdigest()
 
 
-def upload_avatar(user_id: int, file_data: bytes, content_type: str) -> str:
-    """Upload avatar and return path."""
-    ext = EXTENSION_MAP.get(content_type)
-    if ext is None:
-        raise ValueError(f"Unsupported content type: {content_type}")
-    hashed_id = _hash_user_id(user_id)
-    path = f"avatars/{hashed_id}.{ext}"
-    s3.put_object(
-        Bucket=R2_BUCKET_NAME,
-        Key=path,
-        Body=file_data,
-        ContentType=content_type,
-    )
-    return path
-
-
 def delete_avatar(avatar_path: str) -> None:
     """Delete avatar from storage."""
     s3.delete_object(Bucket=R2_BUCKET_NAME, Key=avatar_path)
@@ -57,22 +41,6 @@ def delete_avatar(avatar_path: str) -> None:
 def get_avatar_url(avatar_path: str) -> str:
     """Get full URL for avatar path."""
     return f"{R2_PUBLIC_URL}/{avatar_path}"
-
-
-def upload_cover(user_id: int, file_data: bytes, content_type: str) -> str:
-    """Upload cover image and return path."""
-    ext = EXTENSION_MAP.get(content_type)
-    if ext is None:
-        raise ValueError(f"Unsupported content type: {content_type}")
-    hashed_id = _hash_user_id(user_id)
-    path = f"covers/{hashed_id}.{ext}"
-    s3.put_object(
-        Bucket=R2_BUCKET_NAME,
-        Key=path,
-        Body=file_data,
-        ContentType=content_type,
-    )
-    return path
 
 
 def delete_cover(cover_path: str) -> None:
@@ -92,22 +60,6 @@ def _hash_post_media(post_id: int, index: int) -> str:
     return hashlib.blake2b(data, key=secret, digest_size=16).hexdigest()
 
 
-def upload_post_media(post_id: int, index: int, file_data: bytes, content_type: str) -> str:
-    """Upload post media and return path."""
-    ext = EXTENSION_MAP.get(content_type)
-    if ext is None:
-        raise ValueError(f"Unsupported content type: {content_type}")
-    hashed_id = _hash_post_media(post_id, index)
-    path = f"newsfeed/{hashed_id}.{ext}"
-    s3.put_object(
-        Bucket=R2_BUCKET_NAME,
-        Key=path,
-        Body=file_data,
-        ContentType=content_type,
-    )
-    return path
-
-
 def delete_post_media(media_path: str) -> None:
     """Delete post media from storage."""
     s3.delete_object(Bucket=R2_BUCKET_NAME, Key=media_path)
@@ -116,3 +68,49 @@ def delete_post_media(media_path: str) -> None:
 def get_post_media_url(media_path: str) -> str:
     """Get full URL for post media path."""
     return f"{R2_PUBLIC_URL}/{media_path}"
+
+
+# --- Presigned URL Generation ---
+
+
+def _generate_upload_url(path: str, content_type: str, expiration: int = 900) -> str:
+    """Generate presigned PUT URL for direct R2 upload."""
+    return s3.generate_presigned_url(
+        "put_object",
+        Params={
+            "Bucket": R2_BUCKET_NAME,
+            "Key": path,
+            "ContentType": content_type,
+        },
+        ExpiresIn=expiration,
+    )
+
+
+def generate_avatar_upload_url(user_id: int, content_type: str) -> dict:
+    """Generate presigned URL for direct avatar upload."""
+    ext = EXTENSION_MAP.get(content_type)
+    if ext is None:
+        raise ValueError(f"Unsupported content type: {content_type}")
+    hashed_id = _hash_user_id(user_id)
+    path = f"avatars/{hashed_id}.{ext}"
+    return {"upload_url": _generate_upload_url(path, content_type), "media_path": path}
+
+
+def generate_cover_upload_url(user_id: int, content_type: str) -> dict:
+    """Generate presigned URL for direct cover upload."""
+    ext = EXTENSION_MAP.get(content_type)
+    if ext is None:
+        raise ValueError(f"Unsupported content type: {content_type}")
+    hashed_id = _hash_user_id(user_id)
+    path = f"covers/{hashed_id}.{ext}"
+    return {"upload_url": _generate_upload_url(path, content_type), "media_path": path}
+
+
+def generate_post_media_upload_url(post_id: int, index: int, content_type: str) -> dict:
+    """Generate presigned URL for direct post media upload."""
+    ext = EXTENSION_MAP.get(content_type)
+    if ext is None:
+        raise ValueError(f"Unsupported content type: {content_type}")
+    hashed_id = _hash_post_media(post_id, index)
+    path = f"newsfeed/{hashed_id}.{ext}"
+    return {"upload_url": _generate_upload_url(path, content_type), "media_path": path}

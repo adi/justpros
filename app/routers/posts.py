@@ -8,9 +8,9 @@ from app.db import database
 from app.routers.messages import notify_user
 from app.storage import (
     delete_post_media,
+    generate_post_media_upload_url,
     get_avatar_url,
     get_post_media_url,
-    upload_post_media,
 )
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
@@ -73,6 +73,28 @@ class VisibilityUpdate(BaseModel):
     def validate_visibility(cls, v: str) -> str:
         if v not in ("public", "connections"):
             raise ValueError("Visibility must be 'public' or 'connections'")
+        return v
+
+
+class MediaUploadUrlRequest(BaseModel):
+    content_type: str
+
+    @field_validator("content_type")
+    @classmethod
+    def validate_content_type(cls, v: str) -> str:
+        if v not in ("image/jpeg", "image/png", "image/webp"):
+            raise ValueError("Only JPEG, PNG, or WebP allowed")
+        return v
+
+
+class MediaConfirmRequest(BaseModel):
+    media_path: str
+
+    @field_validator("media_path")
+    @classmethod
+    def validate_media_path(cls, v: str) -> str:
+        if not v.startswith("newsfeed/") or not any(v.endswith(ext) for ext in (".jpg", ".png", ".webp")):
+            raise ValueError("Invalid media path")
         return v
 
 
@@ -502,22 +524,14 @@ async def create_post(
     }
 
 
-@router.post("/{post_id}/media")
-async def upload_media(
+@router.post("/{post_id}/media/upload-url")
+async def get_media_upload_url(
     post_id: int,
-    file: UploadFile,
+    payload: MediaUploadUrlRequest,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Upload media to a post."""
+    """Generate presigned URL for direct R2 upload."""
     user_id = current_user["id"]
-
-    # Check file type
-    content_type = file.content_type
-    if content_type not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only JPEG, PNG, or WebP images allowed",
-        )
 
     # Check post exists and user is author
     post = await database.fetch_one(
@@ -549,16 +563,49 @@ async def upload_media(
             detail="Maximum 1 image per post",
         )
 
-    # Read and validate file size
-    contents = await file.read()
-    if len(contents) > 5 * 1024 * 1024:
+    # Generate presigned URL
+    result = generate_post_media_upload_url(post_id, media_count["count"], payload.content_type)
+    return result
+
+
+@router.post("/{post_id}/media/confirm")
+async def confirm_media_upload(
+    post_id: int,
+    payload: MediaConfirmRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Confirm media was uploaded and record in database."""
+    user_id = current_user["id"]
+
+    # Check post exists and user is author
+    post = await database.fetch_one(
+        "SELECT id, author_id, reply_to_id FROM posts WHERE id = :post_id",
+        {"post_id": post_id},
+    )
+
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+    if post["author_id"] != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only add media to your own posts")
+
+    # Only allow media on top-level posts (not comments)
+    if post["reply_to_id"] is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File too large (max 5MB)",
+            detail="Cannot add media to comments",
         )
 
-    # Upload to storage
-    media_path = upload_post_media(post_id, media_count["count"], contents, content_type)
+    # Check media count (max 1 image per post)
+    media_count = await database.fetch_one(
+        "SELECT COUNT(*) as count FROM post_media WHERE post_id = :post_id",
+        {"post_id": post_id},
+    )
+    if media_count["count"] >= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum 1 image per post",
+        )
 
     # Store in database
     result = await database.fetch_one(
@@ -569,7 +616,7 @@ async def upload_media(
         """,
         {
             "post_id": post_id,
-            "media_path": media_path,
+            "media_path": payload.media_path,
             "media_type": "image",
             "display_order": media_count["count"],
         },
@@ -577,7 +624,7 @@ async def upload_media(
 
     return {
         "id": result["id"],
-        "url": get_post_media_url(media_path),
+        "url": get_post_media_url(payload.media_path),
         "type": "image",
     }
 

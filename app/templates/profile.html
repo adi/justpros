@@ -264,31 +264,62 @@
         const messageEl = document.getElementById('cover-message');
         messageEl.innerHTML = '<p class="text-gray-500">Uploading...</p>';
 
-        const formData = new FormData();
-        formData.append('file', file);
-
         try {
-            const response = await fetch('/api/me/cover', {
+            // Step 1: Get presigned URL from server
+            const urlRes = await fetch('/api/me/cover/upload-url', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content_type: file.type })
             });
 
-            if (response.status === 401) {
+            if (urlRes.status === 401) {
                 localStorage.removeItem('token');
                 window.location.href = '/login';
                 return;
             }
 
-            if (response.ok) {
-                const data = await response.json();
+            if (!urlRes.ok) {
+                const data = await urlRes.json();
+                messageEl.innerHTML = `<p class="text-red-600">${data.detail || 'Failed to get upload URL'}</p>`;
+                return;
+            }
+
+            const { upload_url, media_path } = await urlRes.json();
+
+            // Step 2: Upload directly to R2
+            const uploadRes = await fetch(upload_url, {
+                method: 'PUT',
+                headers: { 'Content-Type': file.type },
+                body: file
+            });
+
+            if (!uploadRes.ok) {
+                messageEl.innerHTML = '<p class="text-red-600">Failed to upload to storage</p>';
+                return;
+            }
+
+            // Step 3: Confirm upload with server
+            const confirmRes = await fetch('/api/me/cover/confirm', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ media_path })
+            });
+
+            if (confirmRes.ok) {
+                const data = await confirmRes.json();
                 document.getElementById('cover-preview').style.backgroundImage = `url(${data.cover_url})`;
                 document.getElementById('cover-button').textContent = 'Change Cover';
                 document.getElementById('cover-delete').classList.remove('hidden');
                 messageEl.innerHTML = '<p class="text-green-600">Cover updated!</p>';
             } else {
-                const data = await response.json();
-                messageEl.innerHTML = `<p class="text-red-600">${data.detail || 'Failed to upload'}</p>`;
+                const data = await confirmRes.json();
+                messageEl.innerHTML = `<p class="text-red-600">${data.detail || 'Failed to confirm upload'}</p>`;
             }
         } catch (error) {
             messageEl.innerHTML = '<p class="text-red-600">Failed to upload. Please try again.</p>';
@@ -351,31 +382,62 @@
         const messageEl = document.getElementById('avatar-message');
         messageEl.innerHTML = '<p class="text-gray-500">Uploading...</p>';
 
-        const formData = new FormData();
-        formData.append('file', file);
-
         try {
-            const response = await fetch('/api/me/avatar', {
+            // Step 1: Get presigned URL from server
+            const urlRes = await fetch('/api/me/avatar/upload-url', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content_type: file.type })
             });
 
-            if (response.status === 401) {
+            if (urlRes.status === 401) {
                 localStorage.removeItem('token');
                 window.location.href = '/login';
                 return;
             }
 
-            if (response.ok) {
-                const data = await response.json();
+            if (!urlRes.ok) {
+                const data = await urlRes.json();
+                messageEl.innerHTML = `<p class="text-red-600">${data.detail || 'Failed to get upload URL'}</p>`;
+                return;
+            }
+
+            const { upload_url, media_path } = await urlRes.json();
+
+            // Step 2: Upload directly to R2
+            const uploadRes = await fetch(upload_url, {
+                method: 'PUT',
+                headers: { 'Content-Type': file.type },
+                body: file
+            });
+
+            if (!uploadRes.ok) {
+                messageEl.innerHTML = '<p class="text-red-600">Failed to upload to storage</p>';
+                return;
+            }
+
+            // Step 3: Confirm upload with server
+            const confirmRes = await fetch('/api/me/avatar/confirm', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ media_path })
+            });
+
+            if (confirmRes.ok) {
+                const data = await confirmRes.json();
                 document.getElementById('avatar-preview').src = data.avatar_url;
                 document.getElementById('avatar-button').textContent = 'Change Photo';
                 document.getElementById('avatar-delete').classList.remove('hidden');
                 messageEl.innerHTML = '<p class="text-green-600">Photo updated!</p>';
             } else {
-                const data = await response.json();
-                messageEl.innerHTML = `<p class="text-red-600">${data.detail || 'Failed to upload'}</p>`;
+                const data = await confirmRes.json();
+                messageEl.innerHTML = `<p class="text-red-600">${data.detail || 'Failed to confirm upload'}</p>`;
             }
         } catch (error) {
             messageEl.innerHTML = '<p class="text-red-600">Failed to upload. Please try again.</p>';
