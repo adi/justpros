@@ -3,7 +3,7 @@
 {% block content %}
 <div class="max-w-2xl mx-auto">
     <!-- Post Composer (shown when logged in) -->
-    <div id="composer" class="hidden bg-white rounded-lg shadow mb-4">
+    <div id="composer" class="hidden bg-white sm:rounded-lg shadow mb-2">
         <!-- Collapsed state: single input -->
         <div id="composer-collapsed" class="p-3 cursor-text flex items-center gap-3" onclick="expandComposer()">
             <img id="composer-avatar-collapsed" src="/static/default-avatar.svg" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200 flex-shrink-0">
@@ -52,7 +52,7 @@
     </div>
 
     <!-- Landing for guests -->
-    <div id="guest-landing" class="flex flex-col items-center justify-center py-16 bg-white rounded-lg shadow">
+    <div id="guest-landing" class="flex flex-col items-center justify-center py-16 bg-white sm:rounded-lg shadow">
         <img src="/static/logo.svg" alt="JustPros" class="w-48 h-48 mb-8">
         <h1 class="text-3xl font-bold text-gray-900 mb-4">The clean professional network</h1>
         <p class="text-gray-600 mb-8 text-center px-4">Show your work. Connect with real pros. No algorithmic nonsense.</p>
@@ -60,7 +60,7 @@
     </div>
 
     <!-- Filter Tabs (shown when logged in) -->
-    <div id="feed-tabs" class="hidden flex border-b border-gray-200 bg-white rounded-t-lg mb-0">
+    <div id="feed-tabs" class="hidden flex border-b border-gray-200 bg-white sm:rounded-t-lg mb-0">
         <button onclick="switchFilter('all')" id="tab-all" class="flex-1 py-3 text-sm font-medium border-b-2 border-brand-blue text-brand-blue">
             Feed
         </button>
@@ -71,11 +71,11 @@
 
     <!-- Feed Posts -->
     <div id="feed-container" class="hidden">
-        <div id="posts-list" class="space-y-4"></div>
+        <div id="posts-list" class="space-y-2"></div>
         <div id="loading-more" class="hidden py-4 text-center">
             <span class="text-gray-500">Loading...</span>
         </div>
-        <div id="no-posts" class="hidden bg-white rounded-lg shadow p-8 text-center">
+        <div id="no-posts" class="hidden bg-white sm:rounded-lg shadow p-8 text-center">
             <p class="text-gray-500">No posts to show.</p>
             <p class="text-gray-400 text-sm mt-2">Connect with people to see their posts, or make your first post!</p>
         </div>
@@ -321,7 +321,7 @@
             : '';
 
         return `
-            <div class="bg-white rounded-lg shadow p-4" data-post-id="${post.id}">
+            <div class="bg-white sm:rounded-lg shadow p-4" data-post-id="${post.id}">
                 <div class="flex items-start gap-3">
                     <a href="${authorUrl}">
                         <img src="${avatarUrl}" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200">
