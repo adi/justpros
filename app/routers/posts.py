@@ -216,7 +216,7 @@ async def update_comment_count(post_id: int) -> None:
     await database.execute(
         """
         UPDATE posts SET
-            comment_count = (SELECT COUNT(*) FROM posts WHERE reply_to_id = :post_id)
+            comment_count = (SELECT COUNT(*) FROM posts WHERE root_post_id = :post_id)
         WHERE id = :post_id
         """,
         {"post_id": post_id},
@@ -903,3 +903,37 @@ async def change_visibility(
     )
 
     return {"visibility": payload.visibility}
+
+
+@router.post("/{post_id}/report")
+async def report_post(
+    post_id: int,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Report a post for abuse."""
+    user_id = current_user["id"]
+
+    post = await get_post_by_id(post_id)
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+    # Can't report own posts
+    if post["author_id"] == user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot report your own post")
+
+    # Check if already reported by this user
+    existing = await database.fetch_one(
+        "SELECT id FROM abuse_reports WHERE post_id = :post_id AND reporter_id = :reporter_id",
+        {"post_id": post_id, "reporter_id": user_id},
+    )
+
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You have already reported this post")
+
+    # Create report
+    await database.execute(
+        "INSERT INTO abuse_reports (post_id, reporter_id) VALUES (:post_id, :reporter_id)",
+        {"post_id": post_id, "reporter_id": user_id},
+    )
+
+    return {"reported": True}
