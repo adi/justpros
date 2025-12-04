@@ -83,3 +83,36 @@ def delete_cover(cover_path: str) -> None:
 def get_cover_url(cover_path: str) -> str:
     """Get full URL for cover path."""
     return f"{R2_PUBLIC_URL}/{cover_path}"
+
+
+def _hash_post_media(post_id: int, index: int) -> str:
+    """Create a non-guessable hash for post media."""
+    secret = R2_SECRET_ACCESS_KEY.encode()
+    data = f"{post_id}:{index}".encode()
+    return hashlib.blake2b(data, key=secret, digest_size=16).hexdigest()
+
+
+def upload_post_media(post_id: int, index: int, file_data: bytes, content_type: str) -> str:
+    """Upload post media and return path."""
+    ext = EXTENSION_MAP.get(content_type)
+    if ext is None:
+        raise ValueError(f"Unsupported content type: {content_type}")
+    hashed_id = _hash_post_media(post_id, index)
+    path = f"newsfeed/{hashed_id}.{ext}"
+    s3.put_object(
+        Bucket=R2_BUCKET_NAME,
+        Key=path,
+        Body=file_data,
+        ContentType=content_type,
+    )
+    return path
+
+
+def delete_post_media(media_path: str) -> None:
+    """Delete post media from storage."""
+    s3.delete_object(Bucket=R2_BUCKET_NAME, Key=media_path)
+
+
+def get_post_media_url(media_path: str) -> str:
+    """Get full URL for post media path."""
+    return f"{R2_PUBLIC_URL}/{media_path}"

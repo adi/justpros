@@ -1,12 +1,17 @@
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from pydantic import BaseModel, field_validator
 
 from app.auth import get_current_user, get_optional_user
 from app.db import database
 from app.routers.messages import notify_user
-from app.storage import get_avatar_url
+from app.storage import (
+    delete_post_media,
+    get_avatar_url,
+    get_post_media_url,
+    upload_post_media,
+)
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
 
@@ -210,7 +215,58 @@ async def process_mentions(content: str, author_id: int) -> None:
         await notify_user(user["handle"], "mention")
 
 
-def format_post_response(post: dict, user_id: int | None, user_vote: int | None = None) -> dict:
+async def get_post_media(post_id: int) -> list[dict]:
+    """Get media attached to a post."""
+    rows = await database.fetch_all(
+        """
+        SELECT id, media_path, media_type, display_order
+        FROM post_media
+        WHERE post_id = :post_id
+        ORDER BY display_order
+        """,
+        {"post_id": post_id},
+    )
+    return [
+        {
+            "id": row["id"],
+            "url": get_post_media_url(row["media_path"]),
+            "type": row["media_type"],
+        }
+        for row in rows
+    ]
+
+
+async def get_posts_media(post_ids: list[int]) -> dict[int, list[dict]]:
+    """Get media for multiple posts at once."""
+    if not post_ids:
+        return {}
+
+    placeholders = ", ".join(f":p{i}" for i in range(len(post_ids)))
+    params = {f"p{i}": pid for i, pid in enumerate(post_ids)}
+
+    rows = await database.fetch_all(
+        f"""
+        SELECT id, post_id, media_path, media_type, display_order
+        FROM post_media
+        WHERE post_id IN ({placeholders})
+        ORDER BY post_id, display_order
+        """,
+        params,
+    )
+
+    result: dict[int, list[dict]] = {pid: [] for pid in post_ids}
+    for row in rows:
+        result[row["post_id"]].append({
+            "id": row["id"],
+            "url": get_post_media_url(row["media_path"]),
+            "type": row["media_type"],
+        })
+    return result
+
+
+def format_post_response(
+    post: dict, user_id: int | None, user_vote: int | None = None, media: list[dict] | None = None
+) -> dict:
     """Format a post for API response."""
     return {
         "id": post["id"],
@@ -225,6 +281,7 @@ def format_post_response(post: dict, user_id: int | None, user_vote: int | None 
         "user_vote": user_vote,
         "is_mine": user_id is not None and post["author_id"] == user_id,
         "created_at": post["created_at"].isoformat() if post["created_at"] else None,
+        "media": media or [],
     }
 
 
@@ -312,26 +369,35 @@ async def list_posts(
 
     posts = await database.fetch_all(base_query, params)
 
-    # Get user votes for these posts if logged in
+    # Get user votes and media for these posts
     user_votes: dict[int, int] = {}
-    if user_id and posts:
+    posts_media: dict[int, list[dict]] = {}
+    if posts:
         post_ids = [p["id"] for p in posts]
-        placeholders = ", ".join(f":p{i}" for i in range(len(post_ids)))
-        vote_params = {f"p{i}": pid for i, pid in enumerate(post_ids)}
-        vote_params["user_id"] = user_id
 
-        votes = await database.fetch_all(
-            f"""
-            SELECT post_id, value FROM post_votes
-            WHERE user_id = :user_id AND post_id IN ({placeholders})
-            """,
-            vote_params,
-        )
-        user_votes = {v["post_id"]: v["value"] for v in votes}
+        # Get media for all posts
+        posts_media = await get_posts_media(post_ids)
+
+        # Get user votes if logged in
+        if user_id:
+            placeholders = ", ".join(f":p{i}" for i in range(len(post_ids)))
+            vote_params = {f"p{i}": pid for i, pid in enumerate(post_ids)}
+            vote_params["user_id"] = user_id
+
+            votes = await database.fetch_all(
+                f"""
+                SELECT post_id, value FROM post_votes
+                WHERE user_id = :user_id AND post_id IN ({placeholders})
+                """,
+                vote_params,
+            )
+            user_votes = {v["post_id"]: v["value"] for v in votes}
 
     return {
         "posts": [
-            format_post_response(dict(p), user_id, user_votes.get(p["id"]))
+            format_post_response(
+                dict(p), user_id, user_votes.get(p["id"]), posts_media.get(p["id"], [])
+            )
             for p in posts
         ],
         "has_more": len(posts) == limit,
@@ -394,8 +460,11 @@ async def get_post(
         )
         comment_votes = {v["post_id"]: v["value"] for v in votes}
 
+    # Get media for the post
+    post_media = await get_post_media(post_id)
+
     return {
-        "post": format_post_response(dict(post), user_id, user_vote),
+        "post": format_post_response(dict(post), user_id, user_vote, post_media),
         "comments": [
             format_post_response(dict(c), user_id, comment_votes.get(c["id"]))
             for c in comments
@@ -431,6 +500,128 @@ async def create_post(
         "id": result["id"],
         "created_at": result["created_at"].isoformat() if result["created_at"] else None,
     }
+
+
+@router.post("/{post_id}/media")
+async def upload_media(
+    post_id: int,
+    file: UploadFile,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Upload media to a post."""
+    user_id = current_user["id"]
+
+    # Check file type
+    content_type = file.content_type
+    if content_type not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only JPEG, PNG, or WebP images allowed",
+        )
+
+    # Check post exists and user is author
+    post = await database.fetch_one(
+        "SELECT id, author_id, reply_to_id FROM posts WHERE id = :post_id",
+        {"post_id": post_id},
+    )
+
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+    if post["author_id"] != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only add media to your own posts")
+
+    # Only allow media on top-level posts (not comments)
+    if post["reply_to_id"] is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot add media to comments",
+        )
+
+    # Check media count (max 1 image per post)
+    media_count = await database.fetch_one(
+        "SELECT COUNT(*) as count FROM post_media WHERE post_id = :post_id",
+        {"post_id": post_id},
+    )
+    if media_count["count"] >= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum 1 image per post",
+        )
+
+    # Read and validate file size
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File too large (max 5MB)",
+        )
+
+    # Upload to storage
+    media_path = upload_post_media(post_id, media_count["count"], contents, content_type)
+
+    # Store in database
+    result = await database.fetch_one(
+        """
+        INSERT INTO post_media (post_id, media_path, media_type, display_order)
+        VALUES (:post_id, :media_path, :media_type, :display_order)
+        RETURNING id
+        """,
+        {
+            "post_id": post_id,
+            "media_path": media_path,
+            "media_type": "image",
+            "display_order": media_count["count"],
+        },
+    )
+
+    return {
+        "id": result["id"],
+        "url": get_post_media_url(media_path),
+        "type": "image",
+    }
+
+
+@router.delete("/{post_id}/media/{media_id}")
+async def delete_media(
+    post_id: int,
+    media_id: int,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Delete media from a post."""
+    user_id = current_user["id"]
+
+    # Check post exists and user is author
+    post = await database.fetch_one(
+        "SELECT author_id FROM posts WHERE id = :post_id",
+        {"post_id": post_id},
+    )
+
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+    if post["author_id"] != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only delete media from your own posts")
+
+    # Get media info
+    media = await database.fetch_one(
+        "SELECT media_path FROM post_media WHERE id = :media_id AND post_id = :post_id",
+        {"media_id": media_id, "post_id": post_id},
+    )
+
+    if media is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+
+    # Delete from storage
+    delete_post_media(media["media_path"])
+
+    # Delete from database
+    await database.execute(
+        "DELETE FROM post_media WHERE id = :media_id",
+        {"media_id": media_id},
+    )
+
+    return {"deleted": True}
 
 
 @router.post("/{post_id}/reply")
@@ -511,7 +702,15 @@ async def delete_post(
 
     parent_id = post["reply_to_id"]
 
-    # Delete the post (cascade will handle children)
+    # Delete media from storage before database cascade deletes them
+    media_paths = await database.fetch_all(
+        "SELECT media_path FROM post_media WHERE post_id = :post_id",
+        {"post_id": post_id},
+    )
+    for media in media_paths:
+        delete_post_media(media["media_path"])
+
+    # Delete the post (cascade will handle children and post_media records)
     await database.execute("DELETE FROM posts WHERE id = :post_id", {"post_id": post_id})
 
     # Update parent's comment count if this was a reply
