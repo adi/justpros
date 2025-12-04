@@ -335,25 +335,25 @@
                             ${deleteButton}
                         </div>
                         <p class="text-gray-800 mt-2 whitespace-pre-wrap break-words ${!isInModal ? 'cursor-pointer' : ''}" ${clickableContent}>${formatContent(post.content)}</p>
-                        ${renderPostMedia(post.media)}
-                        <div class="flex items-center gap-4 mt-3 text-sm">
-                            <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, 1, event)"` : ''}>
-                                <span class="${upvoteActive}">&#128077;</span>
-                                <span id="upvotes-${post.id}" class="${upvoteActive}">${post.upvote_count}</span>
-                            </div>
-                            <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, -1, event)"` : ''}>
-                                <span class="${downvoteActive}">&#128078;</span>
-                                <span id="downvotes-${post.id}" class="${downvoteActive}">${post.downvote_count}</span>
-                            </div>
-                            ${!isInModal ? `
-                            <button onclick="showPostModal(${post.id})" class="flex items-center gap-1 text-gray-500 hover:text-brand-blue">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                                </svg>
-                                <span>${post.comment_count}</span>
-                            </button>` : ''}
-                        </div>
                     </div>
+                </div>
+                ${renderPostMedia(post.media)}
+                <div class="flex items-center gap-4 mt-3 text-sm">
+                    <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, 1, event)"` : ''}>
+                        <span class="${upvoteActive}">&#128077;</span>
+                        <span id="upvotes-${post.id}" class="${upvoteActive}">${post.upvote_count}</span>
+                    </div>
+                    <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, -1, event)"` : ''}>
+                        <span class="${downvoteActive}">&#128078;</span>
+                        <span id="downvotes-${post.id}" class="${downvoteActive}">${post.downvote_count}</span>
+                    </div>
+                    ${!isInModal ? `
+                    <button onclick="showPostModal(${post.id})" class="flex items-center gap-1 text-gray-500 hover:text-brand-blue">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                        </svg>
+                        <span>${post.comment_count}</span>
+                    </button>` : ''}
                 </div>
             </div>
         `;
@@ -394,9 +394,7 @@
         if (!media || media.length === 0) return '';
 
         const m = media[0];
-        return `<div class="mt-3">
-            <img src="${m.url}" alt="" class="w-full aspect-video object-cover rounded-lg cursor-pointer" onclick="openImageModal('${m.url}', event)">
-        </div>`;
+        return `<div class="mt-3 -mx-4"><img src="${m.url}" alt="" class="w-full cursor-pointer" onclick="openImageModal('${m.url}', event)"></div>`
     }
 
     function openImageModal(url, event) {
