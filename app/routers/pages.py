@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from app.db import database
-from app.storage import get_avatar_url, get_cover_url
+from app.storage import get_avatar_url, get_cover_url, get_post_media_url
 
 router = APIRouter(tags=["pages"])
 
@@ -90,9 +90,23 @@ async def single_post_page(request: Request, handle: str, post_id: int) -> HTMLR
         # Truncate content for OG description
         content = post["content"] or ""
         context["og_description"] = content[:200] + "..." if len(content) > 200 else content
-        context["og_image"] = (
-            get_avatar_url(post["avatar_path"]) if post["avatar_path"] else None
+
+        # Check for post media (image/video) for OG image
+        media = await database.fetch_one(
+            """
+            SELECT media_path, media_type FROM post_media
+            WHERE post_id = :post_id
+            ORDER BY display_order LIMIT 1
+            """,
+            {"post_id": post_id},
         )
+
+        if media:
+            # Use media as OG image (works for images, videos show thumbnail on some platforms)
+            context["og_image"] = get_post_media_url(media["media_path"])
+        elif post["avatar_path"]:
+            # Fall back to author's avatar
+            context["og_image"] = get_avatar_url(post["avatar_path"])
 
     return request.app.state.templates.TemplateResponse(
         request, "single_post.html", context
