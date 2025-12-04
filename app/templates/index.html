@@ -584,9 +584,7 @@
     // Post form
     function updatePostButtonState() {
         const content = document.getElementById('post-content').value.trim();
-        const hasContent = content.length > 0;
-        const hasMedia = pendingMedia.length > 0;
-        document.getElementById('post-submit').disabled = !hasContent && !hasMedia;
+        document.getElementById('post-submit').disabled = content.length === 0;
     }
 
     document.getElementById('post-content').addEventListener('input', (e) => {
