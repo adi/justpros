@@ -77,32 +77,6 @@
     </div>
 </div>
 
-<!-- Post Detail Modal -->
-<div id="post-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div class="p-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 class="text-lg font-semibold">Post</h2>
-            <button onclick="hidePostModal()" class="text-gray-500 hover:text-gray-700">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-            </button>
-        </div>
-        <div id="post-modal-content" class="flex-1 overflow-y-auto p-4"></div>
-        <div id="reply-form-container" class="hidden p-4 border-t border-gray-200">
-            <form id="reply-form">
-                <div class="flex gap-2">
-                    <input type="text" id="reply-input" placeholder="Write a comment..." maxlength="2000"
-                        class="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-blue">
-                    <button type="submit" class="px-4 py-2 bg-brand-blue text-white rounded-full hover:opacity-90">
-                        Reply
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
 <!-- Delete Confirmation Modal -->
 <div id="delete-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
     <div class="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-6">
@@ -125,9 +99,12 @@
     let hasMore = true;
     let lastPostId = null;
     let currentUserId = null;
-    let currentPostId = null; // For modal
     let deletePostId = null; // For delete confirmation
     let pendingMedia = []; // Files selected for upload
+    let expandedPosts = new Set(); // Track which posts have comments expanded
+    let loadedComments = {}; // Cache loaded comments by post ID
+    let replyingTo = {}; // Track which comment we're replying to: { rootPostId: commentId }
+    const COMMENT_TRUNCATE_LENGTH = 280; // Characters before truncating
 
     const composerPlaceholders = [
         "What's on your mind?",
@@ -278,7 +255,7 @@
         }
     }
 
-    function renderPost(post, isInModal = false) {
+    function renderPost(post) {
         const authorUrl = `/u/${post.author.handle}`;
         const avatarUrl = post.author.avatar_url || '/static/default-avatar.svg';
         const timeStr = formatTime(post.created_at);
@@ -306,45 +283,43 @@
                </button>`
             : '';
 
-        const clickableContent = !isInModal
-            ? `onclick="showPostModal(${post.id})"`
-            : '';
-
         return `
-            <div class="bg-white sm:rounded-lg shadow p-4" data-post-id="${post.id}">
-                <div class="flex items-start gap-3">
-                    <a href="${authorUrl}">
-                        <img src="${avatarUrl}" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200">
-                    </a>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <a href="${authorUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.author.name || post.author.handle)}</a>
-                            <span class="text-gray-400">@${post.author.handle}</span>
-                            ${visibilityIcon}
-                            <span class="text-gray-400 text-sm">${timeStr}</span>
-                            ${deleteButton}
+            <div class="bg-white sm:rounded-lg shadow" data-post-id="${post.id}">
+                <div class="p-4">
+                    <div class="flex items-start gap-3">
+                        <a href="${authorUrl}">
+                            <img src="${avatarUrl}" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200">
+                        </a>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <a href="${authorUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.author.name || post.author.handle)}</a>
+                                <span class="text-gray-400">@${post.author.handle}</span>
+                                ${visibilityIcon}
+                                <span class="text-gray-400 text-sm">${timeStr}</span>
+                                ${deleteButton}
+                            </div>
+                            <p class="text-gray-800 mt-2 whitespace-pre-wrap break-words">${formatContent(post.content)}</p>
                         </div>
-                        <p class="text-gray-800 mt-2 whitespace-pre-wrap break-words ${!isInModal ? 'cursor-pointer' : ''}" ${clickableContent}>${formatContent(post.content)}</p>
+                    </div>
+                    ${renderPostMedia(post.media)}
+                    <div class="flex items-center gap-4 mt-3 text-sm">
+                        <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, 1, event)"` : ''}>
+                            <span class="${upvoteActive}">&#128077;</span>
+                            <span id="upvotes-${post.id}" class="${upvoteActive}">${post.upvote_count}</span>
+                        </div>
+                        <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, -1, event)"` : ''}>
+                            <span class="${downvoteActive}">&#128078;</span>
+                            <span id="downvotes-${post.id}" class="${downvoteActive}">${post.downvote_count}</span>
+                        </div>
+                        <button onclick="toggleComments(${post.id})" class="flex items-center gap-1 text-gray-500 hover:text-brand-blue" id="comment-btn-${post.id}">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                            <span id="comment-count-${post.id}">${post.comment_count}</span>
+                        </button>
                     </div>
                 </div>
-                ${renderPostMedia(post.media)}
-                <div class="flex items-center gap-4 mt-3 text-sm">
-                    <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, 1, event)"` : ''}>
-                        <span class="${upvoteActive}">&#128077;</span>
-                        <span id="upvotes-${post.id}" class="${upvoteActive}">${post.upvote_count}</span>
-                    </div>
-                    <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, -1, event)"` : ''}>
-                        <span class="${downvoteActive}">&#128078;</span>
-                        <span id="downvotes-${post.id}" class="${downvoteActive}">${post.downvote_count}</span>
-                    </div>
-                    ${!isInModal ? `
-                    <button onclick="showPostModal(${post.id})" class="flex items-center gap-1 text-gray-500 hover:text-brand-blue">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                        </svg>
-                        <span>${post.comment_count}</span>
-                    </button>` : ''}
-                </div>
+                <div id="comments-section-${post.id}" class="hidden border-t border-gray-100"></div>
             </div>
         `;
     }
@@ -698,52 +673,84 @@
         }
     }
 
-    // Post Modal
-    async function showPostModal(postId) {
-        currentPostId = postId;
+    // Inline Comments System
+    async function toggleComments(postId) {
+        const section = document.getElementById(`comments-section-${postId}`);
+
+        if (expandedPosts.has(postId)) {
+            // Collapse
+            section.classList.add('hidden');
+            expandedPosts.delete(postId);
+        } else {
+            // Expand
+            section.classList.remove('hidden');
+            expandedPosts.add(postId);
+
+            // Load comments if not cached
+            if (!loadedComments[postId]) {
+                section.innerHTML = '<div class="p-4 text-center text-gray-500">Loading...</div>';
+                await loadComments(postId);
+            } else {
+                renderCommentsSection(postId, loadedComments[postId]);
+            }
+        }
+    }
+
+    async function loadComments(postId) {
         const token = localStorage.getItem('token');
         const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
         try {
             const response = await fetch(`/api/posts/${postId}`, { headers });
             if (!response.ok) {
-                alert('Post not found');
+                console.error('Failed to load comments');
                 return;
             }
 
             const data = await response.json();
-            const modalContent = document.getElementById('post-modal-content');
-
-            // Render main post
-            let html = renderPost(data.post, true);
-
-            // Render comments
-            if (data.comments.length > 0) {
-                html += '<div class="mt-4 border-t border-gray-200 pt-4 space-y-4">';
-                html += '<h3 class="font-medium text-gray-700">Comments</h3>';
-                data.comments.forEach(comment => {
-                    html += renderComment(comment);
-                });
-                html += '</div>';
-            }
-
-            modalContent.innerHTML = html;
-
-            // Show reply form if logged in
-            const replyContainer = document.getElementById('reply-form-container');
-            if (token) {
-                replyContainer.classList.remove('hidden');
-            } else {
-                replyContainer.classList.add('hidden');
-            }
-
-            document.getElementById('post-modal').classList.remove('hidden');
+            loadedComments[postId] = data.comments;
+            renderCommentsSection(postId, data.comments);
         } catch (e) {
-            console.error('Failed to load post:', e);
+            console.error('Failed to load comments:', e);
         }
     }
 
-    function renderComment(comment, depth = 0) {
+    function renderCommentsSection(postId, comments) {
+        const section = document.getElementById(`comments-section-${postId}`);
+        const token = localStorage.getItem('token');
+
+        let html = '<div class="divide-y divide-gray-100">';
+
+        if (comments.length === 0) {
+            html += '<div class="p-4 text-center text-gray-500 text-sm">No comments yet</div>';
+        } else {
+            comments.forEach(comment => {
+                html += renderComment(comment, postId, comments);
+            });
+        }
+
+        html += '</div>';
+
+        // Reply form
+        if (token) {
+            html += `
+                <div class="p-3 border-t border-gray-100">
+                    <div id="reply-indicator-${postId}" class="hidden text-xs text-brand-blue mb-2 flex items-center"></div>
+                    <form onsubmit="submitReply(event, ${postId})" class="flex gap-2">
+                        <input type="text" id="reply-input-${postId}" placeholder="Write a comment..." maxlength="2000"
+                            class="flex-1 px-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                        <button type="submit" class="px-4 py-2 bg-brand-blue text-white rounded-full hover:opacity-90 text-sm">
+                            Reply
+                        </button>
+                    </form>
+                </div>
+            `;
+        }
+
+        section.innerHTML = html;
+    }
+
+    function renderComment(comment, rootPostId, allComments) {
         const authorUrl = `/u/${comment.author.handle}`;
         const avatarUrl = comment.author.avatar_url || '/static/default-avatar.svg';
         const timeStr = formatTime(comment.created_at);
@@ -756,58 +763,91 @@
         const voteButtonClass = canVote ? 'hover:opacity-70 cursor-pointer' : 'cursor-default';
 
         const deleteButton = comment.is_mine
-            ? `<button onclick="showDeleteModal(${comment.id})" class="text-gray-400 hover:text-red-600 ml-auto text-xs">Delete</button>`
+            ? `<button onclick="showDeleteModal(${comment.id}, ${rootPostId})" class="text-gray-400 hover:text-red-600 ml-auto text-xs">Delete</button>`
             : '';
 
-        const marginClass = depth > 0 ? `ml-${Math.min(depth * 4, 12)}` : '';
+        // Check if this is a reply to another comment (not the root post)
+        let replyToButton = '';
+        if (comment.reply_to_id && comment.reply_to_id !== rootPostId) {
+            // Find the parent comment
+            const parentComment = allComments.find(c => c.id === comment.reply_to_id);
+            if (parentComment) {
+                replyToButton = `<button onclick="scrollToComment(${comment.reply_to_id})" class="text-brand-blue hover:underline flex items-center justify-center w-6 h-6" title="Jump to parent comment">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 20h-8v-16M12 4l-4 4m4-4l4 4"/>
+                    </svg>
+                </button>`;
+            }
+        }
+
+        // Truncate long comments
+        const content = comment.content || '';
+        const isTruncated = content.length > COMMENT_TRUNCATE_LENGTH;
+        const displayContent = isTruncated
+            ? content.substring(0, COMMENT_TRUNCATE_LENGTH) + '...'
+            : content;
+        const showMoreButton = isTruncated
+            ? `<button onclick="expandComment(${comment.id})" class="text-brand-blue hover:underline text-xs" id="expand-btn-${comment.id}">show more</button>`
+            : '';
 
         return `
-            <div class="flex items-start gap-2 ${marginClass}" data-post-id="${comment.id}">
-                <a href="${authorUrl}">
-                    <img src="${avatarUrl}" alt="" class="w-8 h-8 rounded-full object-cover bg-gray-200">
-                </a>
-                <div class="flex-1 bg-gray-50 rounded-lg p-3">
-                    <div class="flex items-center gap-2 flex-wrap text-sm">
-                        <a href="${authorUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(comment.author.name || comment.author.handle)}</a>
-                        <span class="text-gray-400">${timeStr}</span>
-                        ${deleteButton}
-                    </div>
-                    <p class="text-gray-800 mt-1 whitespace-pre-wrap break-words text-sm">${formatContent(comment.content)}</p>
-                    <div class="flex items-center gap-3 mt-2 text-xs">
-                        <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${comment.id}, 1, event)"` : ''}>
-                            <span class="${upvoteActive}">&#128077;</span>
-                            <span id="upvotes-${comment.id}" class="${upvoteActive}">${comment.upvote_count}</span>
+            <div class="p-3 hover:bg-gray-50" id="comment-${comment.id}" data-post-id="${comment.id}">
+                <div class="flex items-start gap-2">
+                    ${replyToButton ? `<div class="flex-shrink-0 pt-1">${replyToButton}</div>` : ''}
+                    <a href="${authorUrl}" class="flex-shrink-0">
+                        <img src="${avatarUrl}" alt="" class="w-8 h-8 rounded-full object-cover bg-gray-200">
+                    </a>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap text-sm">
+                            <a href="${authorUrl}" class="font-medium text-gray-900 hover:underline">${escapeHtml(comment.author.name || comment.author.handle)}</a>
+                            <span class="text-gray-400 text-xs">${timeStr}</span>
+                            ${deleteButton}
                         </div>
-                        <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${comment.id}, -1, event)"` : ''}>
-                            <span class="${downvoteActive}">&#128078;</span>
-                            <span id="downvotes-${comment.id}" class="${downvoteActive}">${comment.downvote_count}</span>
+                        <p class="text-gray-800 mt-1 whitespace-pre-wrap break-words text-sm" id="content-${comment.id}" data-full="${escapeHtml(content)}">${formatContent(displayContent)}</p>
+                        ${showMoreButton}
+                        <div class="flex items-center gap-3 mt-2 text-xs">
+                            <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${comment.id}, 1, event)"` : ''}>
+                                <span class="${upvoteActive}">&#128077;</span>
+                                <span id="upvotes-${comment.id}" class="${upvoteActive}">${comment.upvote_count}</span>
+                            </div>
+                            <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${comment.id}, -1, event)"` : ''}>
+                                <span class="${downvoteActive}">&#128078;</span>
+                                <span id="downvotes-${comment.id}" class="${downvoteActive}">${comment.downvote_count}</span>
+                            </div>
+                            ${token ? `<button onclick="replyToComment(${rootPostId}, ${comment.id})" class="text-gray-500 hover:text-brand-blue">Reply</button>` : ''}
                         </div>
-                        ${token ? `<button onclick="replyToComment(${comment.id}, '${comment.author.handle}')" class="text-gray-500 hover:text-brand-blue">Reply</button>` : ''}
                     </div>
                 </div>
             </div>
         `;
     }
 
-    function hidePostModal() {
-        document.getElementById('post-modal').classList.add('hidden');
-        currentPostId = null;
-        document.getElementById('reply-input').value = '';
+    function expandComment(commentId) {
+        const contentEl = document.getElementById(`content-${commentId}`);
+        const expandBtn = document.getElementById(`expand-btn-${commentId}`);
+        if (contentEl && expandBtn) {
+            const fullContent = contentEl.dataset.full;
+            contentEl.innerHTML = formatContent(fullContent);
+            expandBtn.remove();
+        }
     }
 
-    // Close modal on background click
-    document.getElementById('post-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'post-modal') {
-            hidePostModal();
+    function scrollToComment(commentId) {
+        const commentEl = document.getElementById(`comment-${commentId}`);
+        if (commentEl) {
+            commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Highlight briefly
+            commentEl.classList.add('bg-yellow-50');
+            setTimeout(() => {
+                commentEl.classList.remove('bg-yellow-50');
+            }, 1500);
         }
-    });
+    }
 
-    // Reply form
-    document.getElementById('reply-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (!currentPostId) return;
+    async function submitReply(event, rootPostId) {
+        event.preventDefault();
 
-        const input = document.getElementById('reply-input');
+        const input = document.getElementById(`reply-input-${rootPostId}`);
         const content = input.value.trim();
         if (!content) return;
 
@@ -817,8 +857,11 @@
             return;
         }
 
+        // Determine what we're replying to (a comment or the root post)
+        const targetId = replyingTo[rootPostId] || rootPostId;
+
         try {
-            const response = await fetch(`/api/posts/${currentPostId}/reply`, {
+            const response = await fetch(`/api/posts/${targetId}/reply`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -829,12 +872,17 @@
 
             if (response.ok) {
                 input.value = '';
-                // Refresh the modal
-                await showPostModal(currentPostId);
-                // Also refresh the feed to update comment count
-                lastPostId = null;
-                hasMore = true;
-                await loadPosts();
+                // Clear reply target
+                delete replyingTo[rootPostId];
+                clearReplyIndicator(rootPostId);
+                // Clear cache and reload comments
+                delete loadedComments[rootPostId];
+                await loadComments(rootPostId);
+                // Update comment count
+                const countEl = document.getElementById(`comment-count-${rootPostId}`);
+                if (countEl) {
+                    countEl.textContent = parseInt(countEl.textContent) + 1;
+                }
             } else {
                 const error = await response.json();
                 alert(error.detail || 'Failed to post comment');
@@ -843,22 +891,55 @@
             console.error('Failed to post comment:', e);
             alert('Failed to post comment');
         }
-    });
+    }
 
-    function replyToComment(commentId, handle) {
-        const input = document.getElementById('reply-input');
-        input.value = `@${handle} `;
-        input.focus();
+    function replyToComment(rootPostId, commentId) {
+        replyingTo[rootPostId] = commentId;
+        const input = document.getElementById(`reply-input-${rootPostId}`);
+        if (input) {
+            input.focus();
+            // Show reply indicator
+            showReplyIndicator(rootPostId);
+        }
+    }
+
+    function showReplyIndicator(rootPostId) {
+        const indicator = document.getElementById(`reply-indicator-${rootPostId}`);
+        if (indicator) {
+            indicator.innerHTML = `Replying <button onclick="cancelReplyTo(${rootPostId})" class="text-gray-400 hover:text-gray-600 ml-1">&times;</button>`;
+            indicator.classList.remove('hidden');
+        }
+    }
+
+    function clearReplyIndicator(rootPostId) {
+        const indicator = document.getElementById(`reply-indicator-${rootPostId}`);
+        if (indicator) {
+            indicator.classList.add('hidden');
+            indicator.innerHTML = '';
+        }
+    }
+
+    function cancelReplyTo(rootPostId) {
+        delete replyingTo[rootPostId];
+        clearReplyIndicator(rootPostId);
+        const input = document.getElementById(`reply-input-${rootPostId}`);
+        if (input) {
+            input.value = '';
+        }
     }
 
     // Delete modal
-    function showDeleteModal(postId) {
+    let deleteRootPostId = null; // Root post ID for comment deletion refresh
+
+    function showDeleteModal(postId, rootPostId = null) {
         deletePostId = postId;
+        deleteRootPostId = rootPostId;
         document.getElementById('delete-modal').classList.remove('hidden');
     }
 
     function hideDeleteModal() {
         deletePostId = null;
+        deleteRootPostId = null;
         document.getElementById('delete-modal').classList.add('hidden');
     }
 
@@ -875,18 +956,25 @@
             });
 
             if (response.ok) {
+                const wasComment = deleteRootPostId !== null;
+                const rootId = deleteRootPostId;
                 hideDeleteModal();
-                // If we're in post modal and deleted the main post, close it
-                if (currentPostId === deletePostId) {
-                    hidePostModal();
-                } else if (currentPostId) {
-                    // Refresh modal for comment deletion
-                    await showPostModal(currentPostId);
+
+                if (wasComment && rootId) {
+                    // Refresh comments for the root post
+                    delete loadedComments[rootId];
+                    await loadComments(rootId);
+                    // Update comment count
+                    const countEl = document.getElementById(`comment-count-${rootId}`);
+                    if (countEl) {
+                        countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
+                    }
+                } else {
+                    // Refresh feed for post deletion
+                    lastPostId = null;
+                    hasMore = true;
+                    await loadPosts();
                 }
-                // Refresh feed
-                lastPostId = null;
-                hasMore = true;
-                await loadPosts();
             } else {
                 const error = await response.json();
                 alert(error.detail || 'Failed to delete');
@@ -905,8 +993,6 @@
                 imageModal.remove();
             } else if (!document.getElementById('delete-modal').classList.contains('hidden')) {
                 hideDeleteModal();
-            } else if (!document.getElementById('post-modal').classList.contains('hidden')) {
-                hidePostModal();
             }
         }
     });

@@ -467,13 +467,13 @@ async def get_post(
         if vote:
             user_vote = vote["value"]
 
-    # Get comments (direct replies)
+    # Get all comments in thread (including nested replies)
     comments = await database.fetch_all(
         """
         SELECT p.*, u.handle, u.first_name, u.middle_name, u.last_name, u.headline, u.avatar_path
         FROM posts p
         JOIN users u ON u.id = p.author_id
-        WHERE p.reply_to_id = :post_id
+        WHERE p.root_post_id = :post_id
         ORDER BY p.created_at ASC
         """,
         {"post_id": post_id},
