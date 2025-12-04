@@ -188,6 +188,14 @@
             window.location.href = '/';
         }
 
+        // Sync auth state across tabs
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'token') {
+                // Token changed in another tab - reload to sync state
+                window.location.reload();
+            }
+        });
+
         checkAuth();
 
         // Search functionality

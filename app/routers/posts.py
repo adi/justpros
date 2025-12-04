@@ -923,7 +923,7 @@ async def report_post(
 
     # Check if already reported by this user
     existing = await database.fetch_one(
-        "SELECT id FROM abuse_reports WHERE post_id = :post_id AND reporter_id = :reporter_id",
+        "SELECT id FROM post_abuse_reports WHERE post_id = :post_id AND reporter_id = :reporter_id",
         {"post_id": post_id, "reporter_id": user_id},
     )
 
@@ -932,7 +932,7 @@ async def report_post(
 
     # Create report
     await database.execute(
-        "INSERT INTO abuse_reports (post_id, reporter_id) VALUES (:post_id, :reporter_id)",
+        "INSERT INTO post_abuse_reports (post_id, reporter_id) VALUES (:post_id, :reporter_id)",
         {"post_id": post_id, "reporter_id": user_id},
     )
 
