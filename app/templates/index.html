@@ -395,7 +395,7 @@
 
         const m = media[0];
         if (m.type === 'video') {
-            return `<div class="mt-3 -mx-4"><video src="${m.url}" controls controlsList="nodownload" class="w-full" preload="metadata"></video></div>`;
+            return `<div class="mt-3 -mx-4"><video src="${m.url}" controls controlsList="nodownload noplaybackrate" disablePictureInPicture class="w-full" preload="metadata"></video></div>`;
         }
         return `<div class="mt-3 -mx-4"><img src="${m.url}" alt="" class="w-full cursor-pointer" onclick="openImageModal('${m.url}', event)"></div>`;
     }
