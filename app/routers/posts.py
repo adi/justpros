@@ -7,9 +7,11 @@ from app.auth import get_current_user, get_optional_user
 from app.db import database
 from app.routers.messages import notify_user
 from app.storage import (
+    POST_MEDIA_EXTENSION_MAP,
     delete_post_media,
     generate_post_media_upload_url,
     get_avatar_url,
+    get_media_type,
     get_post_media_url,
 )
 
@@ -76,24 +78,36 @@ class VisibilityUpdate(BaseModel):
         return v
 
 
+ALLOWED_MEDIA_TYPES = tuple(POST_MEDIA_EXTENSION_MAP.keys())
+ALLOWED_EXTENSIONS = tuple(f".{ext}" for ext in POST_MEDIA_EXTENSION_MAP.values())
+
+
 class MediaUploadUrlRequest(BaseModel):
     content_type: str
 
     @field_validator("content_type")
     @classmethod
     def validate_content_type(cls, v: str) -> str:
-        if v not in ("image/jpeg", "image/png", "image/webp"):
-            raise ValueError("Only JPEG, PNG, or WebP allowed")
+        if v not in ALLOWED_MEDIA_TYPES:
+            raise ValueError("Only JPEG, PNG, WebP images or MP4, WebM, MOV videos allowed")
         return v
 
 
 class MediaConfirmRequest(BaseModel):
+    content_type: str
     media_path: str
+
+    @field_validator("content_type")
+    @classmethod
+    def validate_content_type(cls, v: str) -> str:
+        if v not in ALLOWED_MEDIA_TYPES:
+            raise ValueError("Only JPEG, PNG, WebP images or MP4, WebM, MOV videos allowed")
+        return v
 
     @field_validator("media_path")
     @classmethod
     def validate_media_path(cls, v: str) -> str:
-        if not v.startswith("newsfeed/") or not any(v.endswith(ext) for ext in (".jpg", ".png", ".webp")):
+        if not v.startswith("newsfeed/") or not any(v.endswith(ext) for ext in ALLOWED_EXTENSIONS):
             raise ValueError("Invalid media path")
         return v
 
@@ -552,7 +566,7 @@ async def get_media_upload_url(
             detail="Cannot add media to comments",
         )
 
-    # Check media count (max 1 image per post)
+    # Check media count (max 1 media per post)
     media_count = await database.fetch_one(
         "SELECT COUNT(*) as count FROM post_media WHERE post_id = :post_id",
         {"post_id": post_id},
@@ -560,7 +574,7 @@ async def get_media_upload_url(
     if media_count["count"] >= 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Maximum 1 image per post",
+            detail="Maximum 1 media per post",
         )
 
     # Generate presigned URL
@@ -596,7 +610,7 @@ async def confirm_media_upload(
             detail="Cannot add media to comments",
         )
 
-    # Check media count (max 1 image per post)
+    # Check media count (max 1 media per post)
     media_count = await database.fetch_one(
         "SELECT COUNT(*) as count FROM post_media WHERE post_id = :post_id",
         {"post_id": post_id},
@@ -604,8 +618,11 @@ async def confirm_media_upload(
     if media_count["count"] >= 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Maximum 1 image per post",
+            detail="Maximum 1 media per post",
         )
+
+    # Determine media type from content type
+    media_type = get_media_type(payload.content_type)
 
     # Store in database
     result = await database.fetch_one(
@@ -617,7 +634,7 @@ async def confirm_media_upload(
         {
             "post_id": post_id,
             "media_path": payload.media_path,
-            "media_type": "image",
+            "media_type": media_type,
             "display_order": media_count["count"],
         },
     )
@@ -625,7 +642,7 @@ async def confirm_media_upload(
     return {
         "id": result["id"],
         "url": get_post_media_url(payload.media_path),
-        "type": "image",
+        "type": media_type,
     }
 
 

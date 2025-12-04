@@ -19,11 +19,20 @@ s3 = boto3.client(
 )
 
 
-EXTENSION_MAP = {
+IMAGE_EXTENSION_MAP = {
     "image/jpeg": "jpg",
     "image/png": "png",
     "image/webp": "webp",
 }
+
+VIDEO_EXTENSION_MAP = {
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
+}
+
+# Combined map for post media (images + videos)
+POST_MEDIA_EXTENSION_MAP = {**IMAGE_EXTENSION_MAP, **VIDEO_EXTENSION_MAP}
 
 
 def _hash_user_id(user_id: int) -> str:
@@ -88,7 +97,7 @@ def _generate_upload_url(path: str, content_type: str, expiration: int = 900) ->
 
 def generate_avatar_upload_url(user_id: int, content_type: str) -> dict:
     """Generate presigned URL for direct avatar upload."""
-    ext = EXTENSION_MAP.get(content_type)
+    ext = IMAGE_EXTENSION_MAP.get(content_type)
     if ext is None:
         raise ValueError(f"Unsupported content type: {content_type}")
     hashed_id = _hash_user_id(user_id)
@@ -98,7 +107,7 @@ def generate_avatar_upload_url(user_id: int, content_type: str) -> dict:
 
 def generate_cover_upload_url(user_id: int, content_type: str) -> dict:
     """Generate presigned URL for direct cover upload."""
-    ext = EXTENSION_MAP.get(content_type)
+    ext = IMAGE_EXTENSION_MAP.get(content_type)
     if ext is None:
         raise ValueError(f"Unsupported content type: {content_type}")
     hashed_id = _hash_user_id(user_id)
@@ -108,9 +117,18 @@ def generate_cover_upload_url(user_id: int, content_type: str) -> dict:
 
 def generate_post_media_upload_url(post_id: int, index: int, content_type: str) -> dict:
     """Generate presigned URL for direct post media upload."""
-    ext = EXTENSION_MAP.get(content_type)
+    ext = POST_MEDIA_EXTENSION_MAP.get(content_type)
     if ext is None:
         raise ValueError(f"Unsupported content type: {content_type}")
     hashed_id = _hash_post_media(post_id, index)
     path = f"newsfeed/{hashed_id}.{ext}"
     return {"upload_url": _generate_upload_url(path, content_type), "media_path": path}
+
+
+def get_media_type(content_type: str) -> str:
+    """Return 'image' or 'video' based on content type."""
+    if content_type in IMAGE_EXTENSION_MAP:
+        return "image"
+    if content_type in VIDEO_EXTENSION_MAP:
+        return "video"
+    raise ValueError(f"Unsupported content type: {content_type}")
