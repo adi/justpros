@@ -342,6 +342,11 @@
     function formatContent(content) {
         // Escape HTML first
         let escaped = escapeHtml(content);
+        // Convert URLs to clickable links (nofollow to prevent reputation transfer)
+        escaped = escaped.replace(
+            /(https?:\/\/[^\s<]+[^\s<.,;:!?\]\)"'])/gi,
+            '<a href="$1" target="_blank" rel="nofollow noopener noreferrer" class="text-brand-blue hover:underline" onclick="event.stopPropagation()">$1</a>'
+        );
         // Convert @mentions to links
         escaped = escaped.replace(/@([a-z0-9_]{3,30})\b/g, '<a href="/u/$1" class="text-brand-blue hover:underline" onclick="event.stopPropagation()">@$1</a>');
         return escaped;
