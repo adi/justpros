@@ -138,17 +138,17 @@ def _format_author(user: dict) -> dict:
 
 
 async def get_connected_user_ids(user_id: int) -> list[int]:
-    """Get IDs of all users connected to this user (mutual confirm exists)."""
+    """Get IDs of all users connected to this user."""
     rows = await database.fetch_all(
         """
-        SELECT DISTINCT
+        SELECT
             CASE
-                WHEN sender_id = :user_id THEN receiver_id
-                ELSE sender_id
+                WHEN user1_id = :user_id THEN user2_id
+                ELSE user1_id
             END as other_user_id
-        FROM messages
-        WHERE kind = 'confirm'
-          AND (sender_id = :user_id OR receiver_id = :user_id)
+        FROM connections
+        WHERE (user1_id = :user_id OR user2_id = :user_id)
+          AND status = 'confirmed'
         """,
         {"user_id": user_id},
     )

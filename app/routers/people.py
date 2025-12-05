@@ -43,53 +43,39 @@ async def _get_user_by_handle(handle: str) -> dict | None:
     )
 
 
-async def _is_connected(user1_id: int, user2_id: int) -> bool:
-    """Check if two users are connected (confirm message exists between them)."""
-    result = await database.fetch_one(
-        """
-        SELECT 1 FROM messages
-        WHERE kind = 'confirm'
-          AND ((sender_id = :u1 AND receiver_id = :u2)
-               OR (sender_id = :u2 AND receiver_id = :u1))
-        LIMIT 1
-        """,
-        {"u1": user1_id, "u2": user2_id},
+def _order_user_ids(id1: int, id2: int) -> tuple[int, int]:
+    """Return IDs in consistent order for unique constraint (user1_id < user2_id)."""
+    return (min(id1, id2), max(id1, id2))
+
+
+async def _get_connection(user1_id: int, user2_id: int) -> dict | None:
+    """Get connection record between two users."""
+    u1, u2 = _order_user_ids(user1_id, user2_id)
+    return await database.fetch_one(
+        """SELECT * FROM connections WHERE user1_id = :u1 AND user2_id = :u2""",
+        {"u1": u1, "u2": u2},
     )
-    return result is not None
+
+
+async def _is_connected(user1_id: int, user2_id: int) -> bool:
+    """O(1) check if two users are connected."""
+    conn = await _get_connection(user1_id, user2_id)
+    return conn is not None and conn["status"] == "confirmed"
 
 
 async def _has_pending_request_from(from_user_id: int, to_user_id: int) -> bool:
     """Check if there's a pending connection request from from_user to to_user."""
-    request = await database.fetch_one(
+    u1, u2 = _order_user_ids(from_user_id, to_user_id)
+    conn = await database.fetch_one(
         """
-        SELECT m.id, m.created_at FROM messages m
-        WHERE m.kind = 'connection_request'
-          AND m.sender_id = :from_id
-          AND m.receiver_id = :to_id
-          AND m.receiver_deleted IS NULL
-        ORDER BY m.created_at DESC
-        LIMIT 1
+        SELECT 1 FROM connections
+        WHERE user1_id = :u1 AND user2_id = :u2
+          AND status = 'pending'
+          AND requested_by = :from_id
         """,
-        {"from_id": from_user_id, "to_id": to_user_id},
+        {"u1": u1, "u2": u2, "from_id": from_user_id},
     )
-
-    if not request:
-        return False
-
-    # Check if there's a confirm after this request
-    confirm = await database.fetch_one(
-        """
-        SELECT 1 FROM messages
-        WHERE kind = 'confirm'
-          AND sender_id = :to_id
-          AND receiver_id = :from_id
-          AND created_at > :request_time
-        LIMIT 1
-        """,
-        {"to_id": to_user_id, "from_id": from_user_id, "request_time": request["created_at"]},
-    )
-
-    return confirm is None
+    return conn is not None
 
 
 # --- Endpoints ---
@@ -102,21 +88,8 @@ async def list_connections(
     """List all confirmed connections for current user."""
     user_id = current_user["id"]
 
-    # Find all users where a confirm message exists between current user and them
     connections = await database.fetch_all(
         """
-        WITH connected_users AS (
-            SELECT DISTINCT
-                CASE
-                    WHEN sender_id = :user_id THEN receiver_id
-                    ELSE sender_id
-                END as other_user_id,
-                MAX(created_at) as connected_at
-            FROM messages
-            WHERE kind = 'confirm'
-              AND (sender_id = :user_id OR receiver_id = :user_id)
-            GROUP BY other_user_id
-        )
         SELECT
             u.handle,
             u.first_name,
@@ -124,10 +97,15 @@ async def list_connections(
             u.last_name,
             u.headline,
             u.avatar_path,
-            cu.connected_at
-        FROM connected_users cu
-        JOIN users u ON u.id = cu.other_user_id
-        ORDER BY cu.connected_at DESC
+            c.responded_at as connected_at
+        FROM connections c
+        JOIN users u ON u.id = CASE
+            WHEN c.user1_id = :user_id THEN c.user2_id
+            ELSE c.user1_id
+        END
+        WHERE (c.user1_id = :user_id OR c.user2_id = :user_id)
+          AND c.status = 'confirmed'
+        ORDER BY c.responded_at DESC
         """,
         {"user_id": user_id},
     )
@@ -148,30 +126,25 @@ async def list_pending_sent(
     """List pending connection requests I have sent."""
     user_id = current_user["id"]
 
-    # Find connection requests I sent that haven't been confirmed
     pending = await database.fetch_all(
         """
-        SELECT DISTINCT ON (m.receiver_id)
+        SELECT
             u.handle,
             u.first_name,
             u.middle_name,
             u.last_name,
             u.headline,
             u.avatar_path,
-            m.created_at as sent_at
-        FROM messages m
-        JOIN users u ON u.id = m.receiver_id
-        WHERE m.kind = 'connection_request'
-          AND m.sender_id = :user_id
-          AND m.sender_deleted IS NULL
-          AND NOT EXISTS (
-              SELECT 1 FROM messages m2
-              WHERE m2.kind = 'confirm'
-                AND m2.sender_id = m.receiver_id
-                AND m2.receiver_id = :user_id
-                AND m2.created_at > m.created_at
-          )
-        ORDER BY m.receiver_id, m.created_at DESC
+            c.requested_at as sent_at
+        FROM connections c
+        JOIN users u ON u.id = CASE
+            WHEN c.user1_id = :user_id THEN c.user2_id
+            ELSE c.user1_id
+        END
+        WHERE (c.user1_id = :user_id OR c.user2_id = :user_id)
+          AND c.status = 'pending'
+          AND c.requested_by = :user_id
+        ORDER BY c.requested_at DESC
         """,
         {"user_id": user_id},
     )
@@ -192,30 +165,22 @@ async def list_pending_received(
     """List pending connection requests awaiting my response."""
     user_id = current_user["id"]
 
-    # Find connection requests sent to me that I haven't confirmed
     pending = await database.fetch_all(
         """
-        SELECT DISTINCT ON (m.sender_id)
+        SELECT
             u.handle,
             u.first_name,
             u.middle_name,
             u.last_name,
             u.headline,
             u.avatar_path,
-            m.created_at as received_at
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        WHERE m.kind = 'connection_request'
-          AND m.receiver_id = :user_id
-          AND m.receiver_deleted IS NULL
-          AND NOT EXISTS (
-              SELECT 1 FROM messages m2
-              WHERE m2.kind = 'confirm'
-                AND m2.sender_id = :user_id
-                AND m2.receiver_id = m.sender_id
-                AND m2.created_at > m.created_at
-          )
-        ORDER BY m.sender_id, m.created_at DESC
+            c.requested_at as received_at
+        FROM connections c
+        JOIN users u ON u.id = c.requested_by
+        WHERE (c.user1_id = :user_id OR c.user2_id = :user_id)
+          AND c.status = 'pending'
+          AND c.requested_by != :user_id
+        ORDER BY c.requested_at DESC
         """,
         {"user_id": user_id},
     )
@@ -238,18 +203,11 @@ async def get_pending_received_count(
 
     result = await database.fetch_one(
         """
-        SELECT COUNT(DISTINCT m.sender_id) as count
-        FROM messages m
-        WHERE m.kind = 'connection_request'
-          AND m.receiver_id = :user_id
-          AND m.receiver_deleted IS NULL
-          AND NOT EXISTS (
-              SELECT 1 FROM messages m2
-              WHERE m2.kind = 'confirm'
-                AND m2.sender_id = :user_id
-                AND m2.receiver_id = m.sender_id
-                AND m2.created_at > m.created_at
-          )
+        SELECT COUNT(*) as count
+        FROM connections
+        WHERE (user1_id = :user_id OR user2_id = :user_id)
+          AND status = 'pending'
+          AND requested_by != :user_id
         """,
         {"user_id": user_id},
     )
@@ -273,31 +231,56 @@ async def send_connection_request(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot connect with yourself")
 
     other_user_id = other_user["id"]
+    u1, u2 = _order_user_ids(user_id, other_user_id)
 
-    # Check if already connected
-    if await _is_connected(user_id, other_user_id):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already connected")
+    # Check existing connection
+    existing = await _get_connection(user_id, other_user_id)
 
-    # Check if there's already a pending request from me
-    if await _has_pending_request_from(user_id, other_user_id):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already have a pending request")
+    if existing:
+        if existing["status"] == "confirmed":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already connected")
+        if existing["status"] == "pending" and existing["requested_by"] == user_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already have a pending request")
+        if existing["status"] == "pending" and existing["requested_by"] != user_id:
+            # They already sent us a request - auto-confirm
+            await database.execute(
+                """
+                UPDATE connections
+                SET status = 'confirmed', responded_at = NOW()
+                WHERE user1_id = :u1 AND user2_id = :u2
+                """,
+                {"u1": u1, "u2": u2},
+            )
+            await notify_user(other_user["handle"], "connection_confirmed")
+            return {"sent": True, "auto_confirmed": True}
+        if existing["status"] == "ignored":
+            # Update to pending with new requester
+            await database.execute(
+                """
+                UPDATE connections
+                SET status = 'pending', requested_by = :requester, requested_at = NOW(), responded_at = NULL
+                WHERE user1_id = :u1 AND user2_id = :u2
+                """,
+                {"u1": u1, "u2": u2, "requester": user_id},
+            )
+            await notify_user(other_user["handle"], "new_connection_request")
+            return {"sent": True}
 
-    # Insert connection request message (no content)
+    # Insert new connection request
     result = await database.fetch_one(
         """
-        INSERT INTO messages (kind, sender_id, receiver_id, content)
-        VALUES ('connection_request', :sender_id, :receiver_id, NULL)
-        RETURNING id, created_at
+        INSERT INTO connections (user1_id, user2_id, status, requested_by, requested_at)
+        VALUES (:u1, :u2, 'pending', :requester, NOW())
+        RETURNING requested_at
         """,
-        {"sender_id": user_id, "receiver_id": other_user_id},
+        {"u1": u1, "u2": u2, "requester": user_id},
     )
 
-    # Notify receiver
     await notify_user(other_user["handle"], "new_connection_request")
 
     return {
         "sent": True,
-        "created_at": result["created_at"].isoformat() if result["created_at"] else None,
+        "created_at": result["requested_at"].isoformat() if result["requested_at"] else None,
     }
 
 
@@ -314,27 +297,30 @@ async def confirm_connection(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     other_user_id = other_user["id"]
+    u1, u2 = _order_user_ids(user_id, other_user_id)
 
-    # Check if there's a pending request from them
-    if not await _has_pending_request_from(other_user_id, user_id):
+    # Check for pending request from them
+    existing = await _get_connection(user_id, other_user_id)
+
+    if not existing or existing["status"] != "pending" or existing["requested_by"] == user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending request to confirm")
 
-    # Insert confirm message
+    # Update to confirmed
     result = await database.fetch_one(
         """
-        INSERT INTO messages (kind, sender_id, receiver_id, content)
-        VALUES ('confirm', :sender_id, :receiver_id, NULL)
-        RETURNING id, created_at
+        UPDATE connections
+        SET status = 'confirmed', responded_at = NOW()
+        WHERE user1_id = :u1 AND user2_id = :u2
+        RETURNING responded_at
         """,
-        {"sender_id": user_id, "receiver_id": other_user_id},
+        {"u1": u1, "u2": u2},
     )
 
-    # Notify the other user
     await notify_user(other_user["handle"], "connection_confirmed")
 
     return {
         "confirmed": True,
-        "created_at": result["created_at"].isoformat() if result["created_at"] else None,
+        "created_at": result["responded_at"].isoformat() if result["responded_at"] else None,
     }
 
 
@@ -343,7 +329,7 @@ async def ignore_connection_request(
     handle: str,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Ignore a pending connection request (soft-delete from my perspective)."""
+    """Ignore a pending connection request."""
     user_id = current_user["id"]
 
     other_user = await _get_user_by_handle(handle)
@@ -351,22 +337,22 @@ async def ignore_connection_request(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     other_user_id = other_user["id"]
+    u1, u2 = _order_user_ids(user_id, other_user_id)
 
-    # Check if there's a pending request from them
-    if not await _has_pending_request_from(other_user_id, user_id):
+    # Check for pending request from them
+    existing = await _get_connection(user_id, other_user_id)
+
+    if not existing or existing["status"] != "pending" or existing["requested_by"] == user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending request to ignore")
 
-    # Soft-delete the connection request from receiver's perspective
+    # Update to ignored
     await database.execute(
         """
-        UPDATE messages
-        SET receiver_deleted = NOW()
-        WHERE kind = 'connection_request'
-          AND sender_id = :other_id
-          AND receiver_id = :user_id
-          AND receiver_deleted IS NULL
+        UPDATE connections
+        SET status = 'ignored', responded_at = NOW()
+        WHERE user1_id = :u1 AND user2_id = :u2
         """,
-        {"user_id": user_id, "other_id": other_user_id},
+        {"u1": u1, "u2": u2},
     )
 
     return {"ignored": True}
@@ -385,20 +371,21 @@ async def disconnect(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     other_user_id = other_user["id"]
+    u1, u2 = _order_user_ids(user_id, other_user_id)
 
     # Check if connected
-    if not await _is_connected(user_id, other_user_id):
+    existing = await _get_connection(user_id, other_user_id)
+
+    if not existing or existing["status"] != "confirmed":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not connected")
 
-    # Delete all confirm messages between the users
+    # Delete the connection entirely
     await database.execute(
         """
-        DELETE FROM messages
-        WHERE kind = 'confirm'
-          AND ((sender_id = :user_id AND receiver_id = :other_id)
-               OR (sender_id = :other_id AND receiver_id = :user_id))
+        DELETE FROM connections
+        WHERE user1_id = :u1 AND user2_id = :u2
         """,
-        {"user_id": user_id, "other_id": other_user_id},
+        {"u1": u1, "u2": u2},
     )
 
     return {"disconnected": True}
@@ -417,22 +404,21 @@ async def withdraw_connection_request(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     other_user_id = other_user["id"]
+    u1, u2 = _order_user_ids(user_id, other_user_id)
 
-    # Check if there's a pending request from me
-    if not await _has_pending_request_from(user_id, other_user_id):
+    # Check for pending request from me
+    existing = await _get_connection(user_id, other_user_id)
+
+    if not existing or existing["status"] != "pending" or existing["requested_by"] != user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending request to withdraw")
 
-    # Soft-delete the connection request from sender's perspective
+    # Delete the pending request
     await database.execute(
         """
-        UPDATE messages
-        SET sender_deleted = NOW()
-        WHERE kind = 'connection_request'
-          AND sender_id = :user_id
-          AND receiver_id = :other_id
-          AND sender_deleted IS NULL
+        DELETE FROM connections
+        WHERE user1_id = :u1 AND user2_id = :u2
         """,
-        {"user_id": user_id, "other_id": other_user_id},
+        {"u1": u1, "u2": u2},
     )
 
     return {"withdrawn": True}
@@ -460,13 +446,19 @@ async def get_connection_status(
 
     other_user_id = other_user["id"]
 
-    connected = await _is_connected(user_id, other_user_id)
-    pending_from_me = await _has_pending_request_from(user_id, other_user_id)
-    pending_from_them = await _has_pending_request_from(other_user_id, user_id)
+    conn = await _get_connection(user_id, other_user_id)
+
+    if not conn:
+        return {
+            "is_self": False,
+            "is_connected": False,
+            "pending_from_me": False,
+            "pending_from_them": False,
+        }
 
     return {
         "is_self": False,
-        "is_connected": connected,
-        "pending_from_me": pending_from_me,
-        "pending_from_them": pending_from_them,
+        "is_connected": conn["status"] == "confirmed",
+        "pending_from_me": conn["status"] == "pending" and conn["requested_by"] == user_id,
+        "pending_from_them": conn["status"] == "pending" and conn["requested_by"] != user_id,
     }

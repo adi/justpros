@@ -84,36 +84,33 @@ async def _get_user_by_handle(handle: str) -> dict | None:
     )
 
 
+def _order_user_ids(id1: int, id2: int) -> tuple[int, int]:
+    """Return IDs in consistent order for connections table constraint."""
+    return (min(id1, id2), max(id1, id2))
+
+
 async def _is_connected(user1_id: int, user2_id: int) -> bool:
-    """Check if two users are connected (confirm message exists between them)."""
+    """Check if two users are connected via the connections table."""
+    u1, u2 = _order_user_ids(user1_id, user2_id)
     result = await database.fetch_one(
         """
-        SELECT 1 FROM messages
-        WHERE kind = 'confirm'
-          AND ((sender_id = :u1 AND receiver_id = :u2)
-               OR (sender_id = :u2 AND receiver_id = :u1))
+        SELECT 1 FROM connections
+        WHERE user1_id = :u1 AND user2_id = :u2
+          AND status = 'confirmed'
         LIMIT 1
         """,
-        {"u1": user1_id, "u2": user2_id},
+        {"u1": u1, "u2": u2},
     )
     return result is not None
 
 
 async def _get_last_read_message_id(user_id: int, other_user_id: int) -> int | None:
-    """Get the last read message ID for a conversation.
-
-    Derives the conversation from the message's sender/receiver.
-    """
+    """Get the last read message ID for a conversation."""
     result = await database.fetch_one(
         """
-        SELECT cr.last_read_message_id
-        FROM conversation_reads cr
-        JOIN messages m ON m.id = cr.last_read_message_id
-        WHERE cr.user_id = :user_id
-          AND (
-              (m.sender_id = :user_id AND m.receiver_id = :other_user_id)
-              OR (m.sender_id = :other_user_id AND m.receiver_id = :user_id)
-          )
+        SELECT last_read_message_id
+        FROM conversation_reads
+        WHERE user_id = :user_id AND other_user_id = :other_user_id
         """,
         {"user_id": user_id, "other_user_id": other_user_id},
     )
@@ -121,34 +118,16 @@ async def _get_last_read_message_id(user_id: int, other_user_id: int) -> int | N
 
 
 async def _update_last_read(user_id: int, other_user_id: int, message_id: int) -> None:
-    """Update the last read message ID for a conversation.
-
-    Since we don't store other_user_id, we need to:
-    1. Find existing read marker for this conversation (by joining to messages)
-    2. Delete it if exists
-    3. Insert new one
-    """
-    # Delete existing read marker for this conversation
+    """Update the last read message ID for a conversation."""
+    # Upsert using ON CONFLICT
     await database.execute(
         """
-        DELETE FROM conversation_reads
-        WHERE user_id = :user_id
-          AND last_read_message_id IN (
-              SELECT m.id FROM messages m
-              WHERE (m.sender_id = :user_id AND m.receiver_id = :other_user_id)
-                 OR (m.sender_id = :other_user_id AND m.receiver_id = :user_id)
-          )
+        INSERT INTO conversation_reads (user_id, other_user_id, last_read_message_id)
+        VALUES (:user_id, :other_user_id, :message_id)
+        ON CONFLICT (user_id, other_user_id)
+        DO UPDATE SET last_read_message_id = :message_id
         """,
-        {"user_id": user_id, "other_user_id": other_user_id},
-    )
-
-    # Insert new read marker
-    await database.execute(
-        """
-        INSERT INTO conversation_reads (user_id, last_read_message_id)
-        VALUES (:user_id, :message_id)
-        """,
-        {"user_id": user_id, "message_id": message_id},
+        {"user_id": user_id, "other_user_id": other_user_id, "message_id": message_id},
     )
 
 
@@ -175,19 +154,19 @@ async def list_conversations(
     """List conversations with connected users only."""
     user_id = current_user["id"]
 
-    # Get conversations only with connected users (where confirm message exists)
+    # Get conversations only with connected users
     conversations = await database.fetch_all(
         """
         WITH connected_users AS (
             -- Find all users we're connected with
-            SELECT DISTINCT
+            SELECT
                 CASE
-                    WHEN sender_id = :user_id THEN receiver_id
-                    ELSE sender_id
+                    WHEN c.user1_id = :user_id THEN c.user2_id
+                    ELSE c.user1_id
                 END as other_user_id
-            FROM messages
-            WHERE kind = 'confirm'
-              AND (sender_id = :user_id OR receiver_id = :user_id)
+            FROM connections c
+            WHERE (c.user1_id = :user_id OR c.user2_id = :user_id)
+              AND c.status = 'confirmed'
         ),
         conversation_data AS (
             SELECT
@@ -198,54 +177,46 @@ async def list_conversations(
                 u.last_name,
                 u.headline,
                 u.avatar_path,
-                -- Get last text message (exclude connection_request/confirm)
+                -- Get last message
                 (
                     SELECT m.id FROM messages m
-                    WHERE m.kind = 'text'
-                      AND ((m.sender_id = :user_id AND m.receiver_id = cu.other_user_id AND m.sender_deleted IS NULL)
+                    WHERE ((m.sender_id = :user_id AND m.receiver_id = cu.other_user_id AND m.sender_deleted IS NULL)
                            OR (m.sender_id = cu.other_user_id AND m.receiver_id = :user_id AND m.receiver_deleted IS NULL))
                     ORDER BY m.created_at DESC
                     LIMIT 1
                 ) as last_message_id,
                 (
                     SELECT m.content FROM messages m
-                    WHERE m.kind = 'text'
-                      AND ((m.sender_id = :user_id AND m.receiver_id = cu.other_user_id AND m.sender_deleted IS NULL)
+                    WHERE ((m.sender_id = :user_id AND m.receiver_id = cu.other_user_id AND m.sender_deleted IS NULL)
                            OR (m.sender_id = cu.other_user_id AND m.receiver_id = :user_id AND m.receiver_deleted IS NULL))
                     ORDER BY m.created_at DESC
                     LIMIT 1
                 ) as last_message_content,
                 (
                     SELECT m.sender_id FROM messages m
-                    WHERE m.kind = 'text'
-                      AND ((m.sender_id = :user_id AND m.receiver_id = cu.other_user_id AND m.sender_deleted IS NULL)
+                    WHERE ((m.sender_id = :user_id AND m.receiver_id = cu.other_user_id AND m.sender_deleted IS NULL)
                            OR (m.sender_id = cu.other_user_id AND m.receiver_id = :user_id AND m.receiver_deleted IS NULL))
                     ORDER BY m.created_at DESC
                     LIMIT 1
                 ) as last_message_sender_id,
                 (
                     SELECT m.created_at FROM messages m
-                    WHERE m.kind = 'text'
-                      AND ((m.sender_id = :user_id AND m.receiver_id = cu.other_user_id AND m.sender_deleted IS NULL)
+                    WHERE ((m.sender_id = :user_id AND m.receiver_id = cu.other_user_id AND m.sender_deleted IS NULL)
                            OR (m.sender_id = cu.other_user_id AND m.receiver_id = :user_id AND m.receiver_deleted IS NULL))
                     ORDER BY m.created_at DESC
                     LIMIT 1
                 ) as last_message_at,
-                -- Unread count (text messages from them newer than our read marker)
+                -- Unread count (messages from them newer than our read marker)
                 (
                     SELECT COUNT(*) FROM messages m
-                    WHERE m.kind = 'text'
-                      AND m.sender_id = cu.other_user_id
+                    WHERE m.sender_id = cu.other_user_id
                       AND m.receiver_id = :user_id
                       AND m.receiver_deleted IS NULL
-                      AND m.id > COALESCE((
-                          SELECT cr.last_read_message_id
-                          FROM conversation_reads cr
-                          JOIN messages rm ON rm.id = cr.last_read_message_id
-                          WHERE cr.user_id = :user_id
-                            AND ((rm.sender_id = :user_id AND rm.receiver_id = cu.other_user_id)
-                                 OR (rm.sender_id = cu.other_user_id AND rm.receiver_id = :user_id))
-                      ), 0)
+                      AND m.id > COALESCE(
+                          (SELECT cr.last_read_message_id FROM conversation_reads cr
+                           WHERE cr.user_id = :user_id AND cr.other_user_id = cu.other_user_id),
+                          0
+                      )
                 ) as unread_count
             FROM connected_users cu
             JOIN users u ON u.id = cu.other_user_id
@@ -275,24 +246,20 @@ async def list_conversations(
 async def get_unread_count(
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Get total unread text message count for navbar badge."""
+    """Get total unread message count for navbar badge."""
     user_id = current_user["id"]
 
     result = await database.fetch_one(
         """
         SELECT COUNT(*) as count
         FROM messages m
-        WHERE m.kind = 'text'
-          AND m.receiver_id = :user_id
+        WHERE m.receiver_id = :user_id
           AND m.receiver_deleted IS NULL
-          AND m.id > COALESCE((
-              SELECT cr.last_read_message_id
-              FROM conversation_reads cr
-              JOIN messages rm ON rm.id = cr.last_read_message_id
-              WHERE cr.user_id = :user_id
-                AND ((rm.sender_id = :user_id AND rm.receiver_id = m.sender_id)
-                     OR (rm.sender_id = m.sender_id AND rm.receiver_id = :user_id))
-          ), 0)
+          AND m.id > COALESCE(
+              (SELECT cr.last_read_message_id FROM conversation_reads cr
+               WHERE cr.user_id = :user_id AND cr.other_user_id = m.sender_id),
+              0
+          )
         """,
         {"user_id": user_id},
     )
@@ -333,7 +300,7 @@ async def get_messages(
     before_id: int | None = None,
     limit: int = 50,
 ) -> dict:
-    """Get text messages in a conversation with a connected user."""
+    """Get messages in a conversation with a connected user."""
     user_id = current_user["id"]
 
     other_user = await _get_user_by_handle(handle)
@@ -350,14 +317,13 @@ async def get_messages(
             detail="You must be connected to view messages",
         )
 
-    # Build query for text messages only (exclude connection_request/confirm)
+    # Build query for messages
     if before_id:
         messages = await database.fetch_all(
             """
             SELECT id, sender_id, content, reply_to, created_at
             FROM messages
-            WHERE kind = 'text'
-              AND ((sender_id = :user_id AND receiver_id = :other_id AND sender_deleted IS NULL)
+            WHERE ((sender_id = :user_id AND receiver_id = :other_id AND sender_deleted IS NULL)
                    OR (sender_id = :other_id AND receiver_id = :user_id AND receiver_deleted IS NULL))
               AND id < :before_id
             ORDER BY created_at DESC
@@ -370,8 +336,7 @@ async def get_messages(
             """
             SELECT id, sender_id, content, reply_to, created_at
             FROM messages
-            WHERE kind = 'text'
-              AND ((sender_id = :user_id AND receiver_id = :other_id AND sender_deleted IS NULL)
+            WHERE ((sender_id = :user_id AND receiver_id = :other_id AND sender_deleted IS NULL)
                    OR (sender_id = :other_id AND receiver_id = :user_id AND receiver_deleted IS NULL))
             ORDER BY created_at DESC
             LIMIT :limit
@@ -406,7 +371,7 @@ async def send_message(
     payload: MessageCreate,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Send a regular text message to a connected user."""
+    """Send a message to a connected user."""
     user_id = current_user["id"]
 
     other_user = await _get_user_by_handle(handle)
@@ -425,11 +390,11 @@ async def send_message(
             detail="You must be connected to send messages",
         )
 
-    # Insert message
+    # Insert message (no 'kind' column anymore)
     result = await database.fetch_one(
         """
-        INSERT INTO messages (kind, sender_id, receiver_id, content, reply_to)
-        VALUES ('text', :sender_id, :receiver_id, :content, :reply_to)
+        INSERT INTO messages (sender_id, receiver_id, content, reply_to)
+        VALUES (:sender_id, :receiver_id, :content, :reply_to)
         RETURNING id, created_at
         """,
         {
