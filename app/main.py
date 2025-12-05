@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.db import connect, disconnect, database
-from app.routers import api, auth, messages, pages, posts
+from app.routers import api, auth, messages, pages, people, posts
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
@@ -71,6 +71,7 @@ app.include_router(auth.router)
 app.include_router(pages.router)
 app.include_router(api.router)
 app.include_router(messages.router)
+app.include_router(people.router)
 app.include_router(posts.router)
 
 

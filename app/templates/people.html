@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block title %}People | JustPros{% endblock %}
+{% block content %}
+<div class="bg-white sm:rounded-lg shadow overflow-hidden">
+    <div class="p-4 border-b border-gray-200">
+        <h1 class="text-xl font-bold text-gray-900">People</h1>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex border-b border-gray-200">
+        <button onclick="switchTab('connections')" id="tab-connections" class="flex-1 py-3 text-sm font-medium border-b-2 border-brand-blue text-brand-blue">
+            Connections
+        </button>
+        <button onclick="switchTab('sent')" id="tab-sent" class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+            Sent
+        </button>
+        <button onclick="switchTab('requests')" id="tab-requests" class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 relative">
+            Requests
+            <span id="requests-badge" class="hidden absolute top-1 right-1/4 w-5 h-5 bg-brand-pink text-white text-xs rounded-full flex items-center justify-center font-medium"></span>
+        </button>
+    </div>
+
+    <!-- Content -->
+    <div id="content" class="min-h-[400px]">
+        <div id="loading" class="flex items-center justify-center p-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue"></div>
+        </div>
+        <div id="list" class="hidden divide-y divide-gray-100"></div>
+        <div id="empty" class="hidden flex items-center justify-center p-8">
+            <p id="empty-message" class="text-gray-500 text-center"></p>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentTab = 'connections';
+    let token = null;
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    async function checkAuth() {
+        token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return false;
+        }
+        return true;
+    }
+
+    function switchTab(tab) {
+        currentTab = tab;
+
+        // Update tab styles
+        document.querySelectorAll('[id^="tab-"]').forEach(t => {
+            t.classList.remove('border-brand-blue', 'text-brand-blue');
+            t.classList.add('border-transparent', 'text-gray-500');
+        });
+        document.getElementById(`tab-${tab}`).classList.remove('border-transparent', 'text-gray-500');
+        document.getElementById(`tab-${tab}`).classList.add('border-brand-blue', 'text-brand-blue');
+
+        loadData();
+    }
+
+    async function loadData() {
+        const loading = document.getElementById('loading');
+        const list = document.getElementById('list');
+        const empty = document.getElementById('empty');
+        const emptyMessage = document.getElementById('empty-message');
+
+        loading.classList.remove('hidden');
+        list.classList.add('hidden');
+        empty.classList.add('hidden');
+
+        try {
+            let endpoint = '';
+            switch (currentTab) {
+                case 'connections':
+                    endpoint = '/api/people/connections';
+                    break;
+                case 'sent':
+                    endpoint = '/api/people/pending-sent';
+                    break;
+                case 'requests':
+                    endpoint = '/api/people/pending-received';
+                    break;
+            }
+
+            const response = await fetch(endpoint, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+                return;
+            }
+
+            const data = await response.json();
+
+            loading.classList.add('hidden');
+
+            if (data.length === 0) {
+                empty.classList.remove('hidden');
+                switch (currentTab) {
+                    case 'connections':
+                        emptyMessage.textContent = 'No connections yet. Visit profiles and click Connect to grow your network.';
+                        break;
+                    case 'sent':
+                        emptyMessage.textContent = 'No pending requests sent.';
+                        break;
+                    case 'requests':
+                        emptyMessage.textContent = 'No pending requests to review.';
+                        break;
+                }
+            } else {
+                list.innerHTML = data.map(person => renderPerson(person)).join('');
+                list.classList.remove('hidden');
+            }
+
+            // Update requests badge
+            await updateRequestsBadge();
+        } catch (error) {
+            console.error('Failed to load data:', error);
+            loading.classList.add('hidden');
+            empty.classList.remove('hidden');
+            emptyMessage.textContent = 'Failed to load. Please try again.';
+        }
+    }
+
+    async function updateRequestsBadge() {
+        try {
+            const response = await fetch('/api/people/pending-received-count', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const badge = document.getElementById('requests-badge');
+                if (data.count > 0) {
+                    badge.textContent = data.count > 9 ? '9+' : data.count.toString();
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+        } catch (e) {}
+    }
+
+    function renderPerson(person) {
+        const avatarUrl = person.avatar_url || '/static/default-avatar.svg';
+        const name = escapeHtml(person.name || person.handle);
+        const headline = person.headline ? escapeHtml(person.headline) : '';
+        const handle = escapeHtml(person.handle);
+
+        let actions = '';
+        let timeInfo = '';
+
+        switch (currentTab) {
+            case 'connections':
+                timeInfo = person.connected_at ? formatDate(person.connected_at) : '';
+                actions = `
+                    <div class="flex gap-2 mt-2 sm:mt-0">
+                        <a href="/messages/${handle}" class="px-3 py-1.5 bg-brand-blue text-white text-sm rounded-md hover:opacity-90">
+                            Message
+                        </a>
+                        <button onclick="disconnect('${handle}')" class="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-50">
+                            Disconnect
+                        </button>
+                    </div>
+                `;
+                break;
+            case 'sent':
+                timeInfo = person.sent_at ? `Sent ${formatDate(person.sent_at)}` : '';
+                actions = `
+                    <div class="flex gap-2 mt-2 sm:mt-0">
+                        <span class="px-3 py-1.5 text-gray-500 text-sm">Pending</span>
+                        <button onclick="withdraw('${handle}')" class="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-50">
+                            Withdraw
+                        </button>
+                    </div>
+                `;
+                break;
+            case 'requests':
+                timeInfo = person.received_at ? formatDate(person.received_at) : '';
+                actions = `
+                    <div class="flex gap-2 mt-2 sm:mt-0">
+                        <button onclick="confirmRequest('${handle}')" class="px-3 py-1.5 bg-brand-blue text-white text-sm rounded-md hover:opacity-90">
+                            Confirm
+                        </button>
+                        <button onclick="ignoreRequest('${handle}')" class="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-50">
+                            Ignore
+                        </button>
+                    </div>
+                `;
+                break;
+        }
+
+        return `
+            <div class="p-4 hover:bg-gray-50">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <a href="/u/${handle}" class="flex items-center gap-3 flex-1 min-w-0">
+                        <img src="${avatarUrl}" alt="" class="w-12 h-12 rounded-full object-cover bg-gray-200 flex-shrink-0">
+                        <div class="min-w-0 flex-1">
+                            <div class="font-medium text-gray-900 truncate">${name}</div>
+                            <div class="text-sm text-gray-500 truncate">@${handle}</div>
+                            ${headline ? `<div class="text-sm text-gray-500 truncate">${headline}</div>` : ''}
+                        </div>
+                    </a>
+                    <div class="flex flex-col items-end gap-1">
+                        ${timeInfo ? `<span class="text-xs text-gray-400">${timeInfo}</span>` : ''}
+                        ${actions}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function formatDate(isoString) {
+        const date = new Date(isoString);
+        const now = new Date();
+        const diff = now - date;
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+        if (days === 0) {
+            return 'Today';
+        } else if (days === 1) {
+            return 'Yesterday';
+        } else if (days < 7) {
+            return `${days} days ago`;
+        } else {
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+    }
+
+    async function confirmRequest(handle) {
+        try {
+            const response = await fetch(`/api/people/${handle}/confirm`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                loadData();
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'Failed to confirm');
+            }
+        } catch (error) {
+            alert('Failed to confirm. Please try again.');
+        }
+    }
+
+    async function ignoreRequest(handle) {
+        try {
+            const response = await fetch(`/api/people/${handle}/ignore`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                loadData();
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'Failed to ignore');
+            }
+        } catch (error) {
+            alert('Failed to ignore. Please try again.');
+        }
+    }
+
+    async function disconnect(handle) {
+        if (!confirm(`Disconnect from @${handle}? You can reconnect later.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/people/${handle}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                loadData();
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'Failed to disconnect');
+            }
+        } catch (error) {
+            alert('Failed to disconnect. Please try again.');
+        }
+    }
+
+    async function withdraw(handle) {
+        if (!confirm(`Withdraw connection request to @${handle}?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/people/request/${handle}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                loadData();
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'Failed to withdraw');
+            }
+        } catch (error) {
+            alert('Failed to withdraw. Please try again.');
+        }
+    }
+
+    // Initialize
+    checkAuth().then(authed => {
+        if (authed) {
+            loadData();
+        }
+    });
+</script>
+{% endblock %}

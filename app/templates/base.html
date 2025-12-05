@@ -68,6 +68,13 @@
                 <a href="/signup" class="bg-brand-blue text-white px-3 sm:px-4 py-1.5 rounded-md hover:opacity-90 text-sm sm:text-base whitespace-nowrap">Sign up</a>
             </div>
             <div id="nav-user" class="hidden flex items-center gap-3 flex-shrink-0">
+                <!-- People icon with badge -->
+                <a href="/people" class="relative text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                    </svg>
+                    <span id="people-badge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-brand-pink text-white text-xs rounded-full flex items-center justify-center font-medium"></span>
+                </a>
                 <!-- Messages icon with badge -->
                 <a href="/messages" class="relative text-gray-500 hover:text-gray-700">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -129,7 +136,7 @@
                         const [meResponse, unreadResponse, pendingResponse] = await Promise.all([
                             fetch('/api/me', { headers: { 'Authorization': `Bearer ${token}` } }),
                             fetch('/api/messages/unread-count', { headers: { 'Authorization': `Bearer ${token}` } }),
-                            fetch('/api/messages/pending-requests-count', { headers: { 'Authorization': `Bearer ${token}` } })
+                            fetch('/api/people/pending-received-count', { headers: { 'Authorization': `Bearer ${token}` } })
                         ]);
 
                         if (meResponse.ok) {
@@ -142,22 +149,26 @@
                             }
                         }
 
-                        // Update message badge (unread messages + pending connections)
-                        let totalBadge = 0;
+                        // Update messages badge (only unread messages)
                         if (unreadResponse.ok) {
                             const unread = await unreadResponse.json();
-                            totalBadge += unread.count || 0;
-                        }
-                        if (pendingResponse.ok) {
-                            const pending = await pendingResponse.json();
-                            totalBadge += pending.count || 0;
+                            const messagesBadge = document.getElementById('messages-badge');
+                            if (unread.count > 0) {
+                                const displayCount = unread.count > 9 ? '9+' : unread.count.toString();
+                                messagesBadge.textContent = displayCount;
+                                messagesBadge.classList.remove('hidden');
+                            }
                         }
 
-                        const badge = document.getElementById('messages-badge');
-                        if (totalBadge > 0) {
-                            const displayCount = totalBadge > 9 ? '9+' : totalBadge.toString();
-                            badge.textContent = displayCount;
-                            badge.classList.remove('hidden');
+                        // Update people badge (pending connection requests)
+                        if (pendingResponse.ok) {
+                            const pending = await pendingResponse.json();
+                            const peopleBadge = document.getElementById('people-badge');
+                            if (pending.count > 0) {
+                                const displayCount = pending.count > 9 ? '9+' : pending.count.toString();
+                                peopleBadge.textContent = displayCount;
+                                peopleBadge.classList.remove('hidden');
+                            }
                         }
                     } catch (e) {
                         // Ignore fetch errors

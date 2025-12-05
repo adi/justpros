@@ -166,41 +166,7 @@
     </div>
 </div>
 
-<!-- Claim Modal -->
-<div id="claim-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full">
-        <div class="p-4 border-b border-gray-200">
-            <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold">Connect with <span id="modal-name"></span></h2>
-                <button onclick="hideClaimModal()" class="text-gray-500 hover:text-gray-700">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
-        </div>
-        <form id="claim-form" class="p-4">
-            <div class="mb-4">
-                <label id="claim-label" class="block text-sm font-medium text-gray-700 mb-1">Tell them why you should be connected</label>
-                <textarea id="claim-content" rows="3" maxlength="500" required
-                    placeholder="e.g., We worked together at Acme Corp from 2020-2022"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue resize-none"></textarea>
-                <p class="text-xs text-gray-500 mt-1"><span id="claim-chars">0</span>/500 characters</p>
-            </div>
-            <div id="claim-error" class="hidden text-red-600 text-sm mb-3"></div>
-            <div class="flex justify-end gap-3">
-                <button type="button" onclick="hideClaimModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
-                    Cancel
-                </button>
-                <button type="submit" id="claim-submit-btn" class="px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 disabled:opacity-50" disabled>
-                    Send Request
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Pending Claim Modal (for incoming requests) -->
+<!-- Pending Request Modal (for incoming requests) -->
 <div id="pending-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
     <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
         <div class="p-6">
@@ -212,14 +178,11 @@
                     </svg>
                 </button>
             </div>
-            <p class="text-gray-600 mb-2"><span id="pending-name" class="font-medium"></span> wants to connect:</p>
-            <div class="bg-gray-50 p-3 rounded-md mb-4">
-                <p id="pending-content" class="text-gray-700 whitespace-pre-wrap"></p>
-            </div>
+            <p class="text-gray-600 mb-4"><span id="pending-name" class="font-medium"></span> wants to connect with you.</p>
             <div id="pending-error" class="hidden text-red-600 text-sm mb-4"></div>
             <div class="flex gap-3">
-                <button onclick="ignorePendingClaim()" class="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">Ignore</button>
-                <button onclick="confirmPendingClaim()" class="flex-1 px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90">Confirm</button>
+                <button onclick="ignorePendingRequest()" class="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">Ignore</button>
+                <button onclick="confirmPendingRequest()" class="flex-1 px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90">Confirm</button>
             </div>
         </div>
     </div>
@@ -231,7 +194,7 @@
     let ownerData = null;
     let isOwner = false;
     let profileName = '';
-    let conversationState = null;
+    let connectionStatus = null;
     let handleAvailable = null;
     let editingSection = null;
 
@@ -306,7 +269,6 @@
             document.getElementById('profile-name').textContent = profileName;
             document.getElementById('profile-handle').textContent = '@' + handle;
             document.getElementById('profile-headline').textContent = profileData.headline || '';
-            document.getElementById('modal-name').textContent = profileName;
             document.getElementById('pending-name').textContent = profileName;
 
             if (profileData.avatar_url) {
@@ -785,34 +747,34 @@
         if (!payload || payload.exp * 1000 <= Date.now()) return;
 
         try {
-            const response = await fetch(`/api/messages/with/${encodeURIComponent(handle)}`, {
+            const response = await fetch(`/api/people/status/${encodeURIComponent(handle)}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!response.ok) return;
 
-            conversationState = await response.json();
+            connectionStatus = await response.json();
 
             const connectBtn = document.getElementById('connect-btn');
             const messageBtn = document.getElementById('message-btn');
             const statusBadge = document.getElementById('connection-status');
 
-            if (conversationState.is_connected) {
+            if (connectionStatus.is_connected) {
                 messageBtn.href = `/messages/${handle}`;
                 messageBtn.classList.remove('hidden');
                 statusBadge.classList.remove('hidden');
                 connectBtn.classList.add('hidden');
-            } else if (conversationState.pending_request_from_them) {
+            } else if (connectionStatus.pending_from_them) {
                 connectBtn.textContent = 'Respond';
                 connectBtn.onclick = showPendingModal;
                 connectBtn.classList.remove('hidden');
-            } else if (conversationState.pending_request_from_me) {
+            } else if (connectionStatus.pending_from_me) {
                 connectBtn.textContent = 'Pending...';
                 connectBtn.disabled = true;
                 connectBtn.className = 'px-4 py-2 bg-gray-100 text-gray-500 rounded-md text-sm font-medium cursor-not-allowed';
                 connectBtn.classList.remove('hidden');
             } else {
                 connectBtn.textContent = 'Connect';
-                connectBtn.onclick = showClaimModal;
+                connectBtn.onclick = sendConnectionRequest;
                 connectBtn.classList.remove('hidden');
             }
         } catch (e) {
@@ -820,48 +782,20 @@
         }
     }
 
-    // --- Modals ---
+    // --- Connection Actions ---
 
-    function showClaimModal() {
-        document.getElementById('claim-label').textContent = `Tell ${profileName} why you should be connected`;
-        document.getElementById('claim-modal').classList.remove('hidden');
-        document.getElementById('claim-content').focus();
-    }
-
-    function hideClaimModal() {
-        document.getElementById('claim-modal').classList.add('hidden');
-        document.getElementById('claim-content').value = '';
-        document.getElementById('claim-chars').textContent = '0';
-        document.getElementById('claim-error').classList.add('hidden');
-        document.getElementById('claim-submit-btn').disabled = true;
-    }
-
-    document.getElementById('claim-content').addEventListener('input', (e) => {
-        const len = e.target.value.trim().length;
-        document.getElementById('claim-chars').textContent = e.target.value.length;
-        document.getElementById('claim-submit-btn').disabled = len < 1;
-    });
-
-    document.getElementById('claim-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const content = document.getElementById('claim-content').value.trim();
-        if (!content) return;
-
+    async function sendConnectionRequest() {
         const token = localStorage.getItem('token');
-        const errorEl = document.getElementById('claim-error');
-        const submitBtn = document.getElementById('claim-submit-btn');
+        const connectBtn = document.getElementById('connect-btn');
+        const originalText = connectBtn.textContent;
 
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Sending...';
+        connectBtn.disabled = true;
+        connectBtn.textContent = 'Sending...';
 
         try {
-            const response = await fetch(`/api/messages/to/${encodeURIComponent(handle)}/connect`, {
+            const response = await fetch(`/api/people/${encodeURIComponent(handle)}/connect`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ content })
+                headers: { 'Authorization': `Bearer ${token}` }
             });
 
             if (!response.ok) {
@@ -869,33 +803,18 @@
                 throw new Error(data.detail || 'Failed to send connection request');
             }
 
-            hideClaimModal();
-            window.location.href = `/messages/${handle}`;
+            // Update button to show pending state
+            connectBtn.textContent = 'Pending...';
+            connectBtn.className = 'px-4 py-2 bg-gray-100 text-gray-500 rounded-md text-sm font-medium cursor-not-allowed';
         } catch (e) {
-            errorEl.textContent = e.message;
-            errorEl.classList.remove('hidden');
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Send Request';
+            alert(e.message);
+            connectBtn.disabled = false;
+            connectBtn.textContent = originalText;
         }
-    });
+    }
 
-    async function showPendingModal() {
-        const token = localStorage.getItem('token');
-        try {
-            const response = await fetch(`/api/messages/with/${encodeURIComponent(handle)}/messages`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!response.ok) return;
-
-            const data = await response.json();
-            const pendingRequest = data.messages.find(m => m.kind === 'connection_request' && !m.is_mine);
-            if (pendingRequest) {
-                document.getElementById('pending-content').textContent = pendingRequest.content;
-                document.getElementById('pending-modal').classList.remove('hidden');
-            }
-        } catch (e) {
-            console.error('Failed to load pending claim:', e);
-        }
+    function showPendingModal() {
+        document.getElementById('pending-modal').classList.remove('hidden');
     }
 
     function hidePendingModal() {
@@ -903,12 +822,12 @@
         document.getElementById('pending-error').classList.add('hidden');
     }
 
-    async function confirmPendingClaim() {
+    async function confirmPendingRequest() {
         const token = localStorage.getItem('token');
         const errorEl = document.getElementById('pending-error');
 
         try {
-            const response = await fetch(`/api/messages/to/${encodeURIComponent(handle)}/confirm`, {
+            const response = await fetch(`/api/people/${encodeURIComponent(handle)}/confirm`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -926,19 +845,19 @@
         }
     }
 
-    async function ignorePendingClaim() {
+    async function ignorePendingRequest() {
         const token = localStorage.getItem('token');
         const errorEl = document.getElementById('pending-error');
 
         try {
-            const response = await fetch(`/api/messages/with/${encodeURIComponent(handle)}`, {
-                method: 'DELETE',
+            const response = await fetch(`/api/people/${encodeURIComponent(handle)}/ignore`, {
+                method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
             if (!response.ok) {
                 const data = await response.json();
-                throw new Error(data.detail || 'Failed to ignore connection');
+                throw new Error(data.detail || 'Failed to ignore request');
             }
 
             hidePendingModal();
@@ -952,7 +871,6 @@
     // Close modals/editing on escape key
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            hideClaimModal();
             hidePendingModal();
             if (editingSection) {
                 cancelEditing(editingSection);
@@ -960,9 +878,6 @@
         }
     });
 
-    document.getElementById('claim-modal').addEventListener('click', (e) => {
-        if (e.target === e.currentTarget) hideClaimModal();
-    });
     document.getElementById('pending-modal').addEventListener('click', (e) => {
         if (e.target === e.currentTarget) hidePendingModal();
     });

@@ -44,6 +44,11 @@ async def settings_page(request: Request) -> HTMLResponse:
     return request.app.state.templates.TemplateResponse(request, "settings.html")
 
 
+@router.api_route("/people", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def people_page(request: Request) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(request, "people.html")
+
+
 @router.api_route("/messages", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def messages_page(request: Request) -> HTMLResponse:
     return request.app.state.templates.TemplateResponse(request, "messages.html")
