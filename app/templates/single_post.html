@@ -92,17 +92,77 @@
         }
     }
 
+    // Scale voting colors and config
+    const SCALE_COLORS = {
+        '-3': '#dc2626', '-2': '#ef4444', '-1': '#f87171',
+        '0': '#9ca3af',
+        '1': '#4ade80', '2': '#22c55e', '3': '#16a34a'
+    };
+
+    let currentUserVotes = {}; // Track user's votes per post
+
+    function getScaleColor(level) {
+        const clamped = Math.round(Math.max(-3, Math.min(3, level)));
+        return SCALE_COLORS[clamped.toString()];
+    }
+
+    function renderScaleIcon(level, size = 24) {
+        const displayLevel = Math.round(Math.max(-3, Math.min(3, level)));
+        const color = getScaleColor(displayLevel);
+        const rotation = displayLevel * 10;
+        return `
+            <svg width="${size}" height="${size}" viewBox="0 0 24 24"
+                 style="transform: rotate(${rotation}deg); transition: transform 0.2s ease-out;">
+                <path fill="${color}" d="M12 3v1l-4.5 2H5v3h2v1H5.5L4 11.5V13h2l1.5 2H12v5h1v-5h3.5l1.5-2h2v-1.5L18.5 10H17V9h2V7h-2.5L12 5V3zm0 4l3 1.5V10H9V8.5L12 7z"/>
+            </svg>
+        `;
+    }
+
+    function renderVotePicker(postId, userVote) {
+        const levels = [-3, -2, -1, 0, 1, 2, 3];
+        const buttons = levels.map(v => {
+            const isSelected = userVote === v;
+            const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-1' : '';
+            const label = v > 0 ? `+${v}` : v.toString();
+            return `
+                <button onclick="submitVote(${postId}, ${v}, event)"
+                        class="w-7 h-7 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center"
+                        title="${label}">
+                    ${renderScaleIcon(v, 22)}
+                </button>
+            `;
+        }).join('');
+
+        return `
+            <div class="vote-picker absolute left-0 mt-2 bg-white shadow-lg rounded-xl p-3 z-50 border border-gray-200"
+                 onclick="event.stopPropagation()">
+                <div class="flex items-center gap-1">
+                    <div class="h-1.5 w-full rounded-full mr-2"
+                         style="background: linear-gradient(to right, #dc2626, #f87171, #9ca3af, #4ade80, #16a34a)"></div>
+                </div>
+                <div class="flex items-center justify-between gap-1 mt-2">
+                    ${buttons}
+                </div>
+                <div class="text-center text-xs text-gray-400 mt-2">
+                    Click to vote • Click again to remove
+                </div>
+            </div>
+        `;
+    }
+
     function renderPost(post, comments) {
         const authorUrl = `/u/${post.author.handle}`;
         const avatarUrl = post.author.avatar_url || '/static/default-avatar.svg';
         const timeStr = formatTime(post.created_at);
 
-        const upvoteActive = post.user_vote === 1 ? 'text-green-600 font-semibold' : 'text-gray-500';
-        const downvoteActive = post.user_vote === -1 ? 'text-red-600 font-semibold' : 'text-gray-500';
+        // Track user's vote for this post
+        if (post.user_vote !== null) {
+            currentUserVotes[post.id] = post.user_vote;
+        }
 
         const token = localStorage.getItem('token');
         const canVote = token && !post.is_mine;
-        const voteButtonClass = canVote ? 'hover:opacity-70 cursor-pointer' : 'cursor-default';
+        const voteButtonClass = canVote ? 'hover:opacity-80 cursor-pointer' : 'cursor-default';
 
         const visibilityIcon = post.visibility === 'public'
             ? `<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Public">
@@ -157,13 +217,13 @@
                     </div>
                     ${renderPostMedia(post.media)}
                     <div class="flex items-center gap-4 mt-3 text-sm">
-                        <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, 1, event)"` : ''}>
-                            <span class="${upvoteActive}">&#128077;</span>
-                            <span id="upvotes-${post.id}" class="${upvoteActive}">${post.upvote_count}</span>
-                        </div>
-                        <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${post.id}, -1, event)"` : ''}>
-                            <span class="${downvoteActive}">&#128078;</span>
-                            <span id="downvotes-${post.id}" class="${downvoteActive}">${post.downvote_count}</span>
+                        <div class="relative" id="vote-container-${post.id}">
+                            <button class="flex items-center gap-1.5 ${voteButtonClass}" ${canVote ? `onclick="toggleVotePicker(${post.id}, event)"` : ''}>
+                                <span id="scale-icon-${post.id}">${renderScaleIcon(post.display_level || 0, 24)}</span>
+                                <span id="vote-count-${post.id}" class="text-gray-500">${post.vote_count > 0 ? post.vote_count : ''}</span>
+                                ${post.user_vote !== null ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 bg-brand-blue rounded-full"></span>' : ''}
+                            </button>
+                            <div id="vote-picker-${post.id}" class="hidden"></div>
                         </div>
                         <div class="flex items-center gap-1 text-gray-500">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -218,12 +278,14 @@
         const avatarUrl = comment.author.avatar_url || '/static/default-avatar.svg';
         const timeStr = formatTime(comment.created_at);
 
-        const upvoteActive = comment.user_vote === 1 ? 'text-green-600 font-semibold' : 'text-gray-500';
-        const downvoteActive = comment.user_vote === -1 ? 'text-red-600 font-semibold' : 'text-gray-500';
+        // Track user's vote for this comment
+        if (comment.user_vote !== null) {
+            currentUserVotes[comment.id] = comment.user_vote;
+        }
 
         const token = localStorage.getItem('token');
         const canVote = token && !comment.is_mine;
-        const voteButtonClass = canVote ? 'hover:opacity-70 cursor-pointer' : 'cursor-default';
+        const voteButtonClass = canVote ? 'hover:opacity-80 cursor-pointer' : 'cursor-default';
 
         // Three dots menu with Delete (if own) and Report Abuse
         const menuItems = [];
@@ -284,13 +346,13 @@
                         <p class="text-gray-800 mt-1 whitespace-pre-wrap break-words text-sm" id="content-${comment.id}" data-full="${escapeHtml(content)}">${formatContent(displayContent)}</p>
                         ${showMoreButton}
                         <div class="flex items-center gap-3 mt-2 text-xs">
-                            <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${comment.id}, 1, event)"` : ''}>
-                                <span class="${upvoteActive}">&#128077;</span>
-                                <span id="upvotes-${comment.id}" class="${upvoteActive}">${comment.upvote_count}</span>
-                            </div>
-                            <div class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="vote(${comment.id}, -1, event)"` : ''}>
-                                <span class="${downvoteActive}">&#128078;</span>
-                                <span id="downvotes-${comment.id}" class="${downvoteActive}">${comment.downvote_count}</span>
+                            <div class="relative" id="vote-container-${comment.id}">
+                                <button class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="toggleVotePicker(${comment.id}, event)"` : ''}>
+                                    <span id="scale-icon-${comment.id}">${renderScaleIcon(comment.display_level || 0, 20)}</span>
+                                    <span id="vote-count-${comment.id}" class="text-gray-500">${comment.vote_count > 0 ? comment.vote_count : ''}</span>
+                                    ${comment.user_vote !== null ? '<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-brand-blue rounded-full"></span>' : ''}
+                                </button>
+                                <div id="vote-picker-${comment.id}" class="hidden"></div>
                             </div>
                             ${token ? `<button onclick="replyToComment(${rootPostId}, ${comment.id})" class="text-gray-500 hover:text-brand-blue">Reply</button>` : ''}
                         </div>
@@ -420,8 +482,35 @@
         }
     }
 
-    // Voting
-    async function vote(postId, value, event) {
+    // Scale Voting System
+    function toggleVotePicker(postId, event) {
+        event.stopPropagation();
+        const picker = document.getElementById(`vote-picker-${postId}`);
+
+        // Close any other open pickers
+        document.querySelectorAll('.vote-picker').forEach(p => {
+            if (p.id !== `vote-picker-${postId}`) {
+                p.parentElement.classList.add('hidden');
+            }
+        });
+
+        if (picker.classList.contains('hidden')) {
+            picker.innerHTML = renderVotePicker(postId, currentUserVotes[postId] ?? null);
+            picker.classList.remove('hidden');
+
+            const closeHandler = (e) => {
+                if (!picker.contains(e.target) && !e.target.closest(`#vote-container-${postId}`)) {
+                    picker.classList.add('hidden');
+                    document.removeEventListener('click', closeHandler);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', closeHandler), 0);
+        } else {
+            picker.classList.add('hidden');
+        }
+    }
+
+    async function submitVote(postId, value, event) {
         event.stopPropagation();
         const token = localStorage.getItem('token');
         if (!token) {
@@ -430,48 +519,46 @@
         }
 
         try {
-            const currentVote = document.getElementById(`upvotes-${postId}`)?.classList.contains('text-green-600') ? 1 :
-                               document.getElementById(`downvotes-${postId}`)?.classList.contains('text-red-600') ? -1 : 0;
-
-            let response;
-            if (currentVote === value) {
-                response = await fetch(`/api/posts/${postId}/vote`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-            } else {
-                response = await fetch(`/api/posts/${postId}/vote`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ value })
-                });
-            }
+            const response = await fetch(`/api/posts/${postId}/vote`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ value })
+            });
 
             if (response.ok) {
                 const data = await response.json();
-                updateVoteDisplay(postId, data);
+                updateScaleDisplay(postId, data);
+                document.getElementById(`vote-picker-${postId}`).classList.add('hidden');
             }
         } catch (e) {
             console.error('Failed to vote:', e);
         }
     }
 
-    function updateVoteDisplay(postId, data) {
-        const upvotesEl = document.getElementById(`upvotes-${postId}`);
-        const downvotesEl = document.getElementById(`downvotes-${postId}`);
+    function updateScaleDisplay(postId, data) {
+        currentUserVotes[postId] = data.user_vote;
 
-        if (upvotesEl) {
-            upvotesEl.textContent = data.upvote_count;
-            upvotesEl.className = data.user_vote === 1 ? 'text-green-600 font-semibold' : 'text-gray-500';
-            upvotesEl.previousElementSibling.className = data.user_vote === 1 ? 'text-green-600 font-semibold' : 'text-gray-500';
+        const iconEl = document.getElementById(`scale-icon-${postId}`);
+        if (iconEl) {
+            iconEl.innerHTML = renderScaleIcon(data.display_level, 24);
         }
-        if (downvotesEl) {
-            downvotesEl.textContent = data.downvote_count;
-            downvotesEl.className = data.user_vote === -1 ? 'text-red-600 font-semibold' : 'text-gray-500';
-            downvotesEl.previousElementSibling.className = data.user_vote === -1 ? 'text-red-600 font-semibold' : 'text-gray-500';
+
+        const countEl = document.getElementById(`vote-count-${postId}`);
+        if (countEl) {
+            countEl.textContent = data.vote_count > 0 ? data.vote_count : '';
+        }
+
+        const container = document.getElementById(`vote-container-${postId}`);
+        const existingDot = container.querySelector('.bg-brand-blue.rounded-full');
+        if (data.user_vote !== null && !existingDot) {
+            const dot = document.createElement('span');
+            dot.className = 'absolute -top-0.5 -right-0.5 w-2 h-2 bg-brand-blue rounded-full';
+            container.querySelector('button').appendChild(dot);
+        } else if (data.user_vote === null && existingDot) {
+            existingDot.remove();
         }
     }
 

@@ -62,8 +62,8 @@ class VoteCreate(BaseModel):
     @field_validator("value")
     @classmethod
     def validate_value(cls, v: int) -> int:
-        if v not in (-1, 1):
-            raise ValueError("Vote must be -1 or 1")
+        if v < -3 or v > 3:
+            raise ValueError("Vote must be between -3 and 3")
         return v
 
 
@@ -198,13 +198,13 @@ async def get_root_post(post: dict) -> dict:
     return post
 
 
-async def update_vote_counts(post_id: int) -> None:
-    """Recalculate and update vote counts for a post."""
+async def update_vote_stats(post_id: int) -> None:
+    """Recalculate and update vote stats for a post."""
     await database.execute(
         """
         UPDATE posts SET
-            upvote_count = (SELECT COUNT(*) FROM post_votes WHERE post_id = :post_id AND value = 1),
-            downvote_count = (SELECT COUNT(*) FROM post_votes WHERE post_id = :post_id AND value = -1)
+            vote_sum = COALESCE((SELECT SUM(value) FROM post_votes WHERE post_id = :post_id), 0),
+            vote_count = (SELECT COUNT(*) FROM post_votes WHERE post_id = :post_id)
         WHERE id = :post_id
         """,
         {"post_id": post_id},
@@ -304,6 +304,9 @@ def format_post_response(
     post: dict, user_id: int | None, user_vote: int | None = None, media: list[dict] | None = None
 ) -> dict:
     """Format a post for API response."""
+    vote_sum = post["vote_sum"]
+    vote_count = post["vote_count"]
+    average = vote_sum / vote_count if vote_count > 0 else 0
     return {
         "id": post["id"],
         "author": _format_author(dict(post)),
@@ -311,8 +314,10 @@ def format_post_response(
         "visibility": post["visibility"],
         "reply_to_id": post["reply_to_id"],
         "root_post_id": post["root_post_id"],
-        "upvote_count": post["upvote_count"],
-        "downvote_count": post["downvote_count"],
+        "vote_sum": vote_sum,
+        "vote_count": vote_count,
+        "average": average,
+        "display_level": round(average),
         "comment_count": post["comment_count"],
         "user_vote": user_vote,
         "is_mine": user_id is not None and post["author_id"] == user_id,
@@ -790,7 +795,7 @@ async def vote_on_post(
     payload: VoteCreate,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Vote on a post (+1 or -1)."""
+    """Vote on a post (-3 to +3 scale)."""
     user_id = current_user["id"]
 
     post = await get_post_by_id(post_id)
@@ -806,30 +811,51 @@ async def vote_on_post(
     if not await can_view_post(user_id, root_post):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot vote on this post")
 
-    # Upsert vote
-    await database.execute(
-        """
-        INSERT INTO post_votes (post_id, user_id, value)
-        VALUES (:post_id, :user_id, :value)
-        ON CONFLICT (post_id, user_id)
-        DO UPDATE SET value = :value, created_at = NOW()
-        """,
-        {"post_id": post_id, "user_id": user_id, "value": payload.value},
+    # Check if user already voted with same value (toggle off)
+    existing_vote = await database.fetch_one(
+        "SELECT value FROM post_votes WHERE post_id = :post_id AND user_id = :user_id",
+        {"post_id": post_id, "user_id": user_id},
     )
 
-    # Update cached counts
-    await update_vote_counts(post_id)
+    if existing_vote and existing_vote["value"] == payload.value:
+        # Same vote value = remove vote
+        await database.execute(
+            "DELETE FROM post_votes WHERE post_id = :post_id AND user_id = :user_id",
+            {"post_id": post_id, "user_id": user_id},
+        )
+        user_vote = None
+    else:
+        # Upsert vote
+        await database.execute(
+            """
+            INSERT INTO post_votes (post_id, user_id, value)
+            VALUES (:post_id, :user_id, :value)
+            ON CONFLICT (post_id, user_id)
+            DO UPDATE SET value = :value, created_at = NOW()
+            """,
+            {"post_id": post_id, "user_id": user_id, "value": payload.value},
+        )
+        user_vote = payload.value
 
-    # Get updated counts
+    # Update cached stats
+    await update_vote_stats(post_id)
+
+    # Get updated stats
     updated = await database.fetch_one(
-        "SELECT upvote_count, downvote_count FROM posts WHERE id = :post_id",
+        "SELECT vote_sum, vote_count FROM posts WHERE id = :post_id",
         {"post_id": post_id},
     )
 
+    vote_sum = updated["vote_sum"]
+    vote_count = updated["vote_count"]
+    average = vote_sum / vote_count if vote_count > 0 else 0
+
     return {
-        "upvote_count": updated["upvote_count"],
-        "downvote_count": updated["downvote_count"],
-        "user_vote": payload.value,
+        "vote_sum": vote_sum,
+        "vote_count": vote_count,
+        "average": average,
+        "display_level": round(average),
+        "user_vote": user_vote,
     }
 
 
@@ -855,18 +881,24 @@ async def remove_vote(
         {"post_id": post_id, "user_id": user_id},
     )
 
-    # Update cached counts
-    await update_vote_counts(post_id)
+    # Update cached stats
+    await update_vote_stats(post_id)
 
-    # Get updated counts
+    # Get updated stats
     updated = await database.fetch_one(
-        "SELECT upvote_count, downvote_count FROM posts WHERE id = :post_id",
+        "SELECT vote_sum, vote_count FROM posts WHERE id = :post_id",
         {"post_id": post_id},
     )
 
+    vote_sum = updated["vote_sum"]
+    vote_count = updated["vote_count"]
+    average = vote_sum / vote_count if vote_count > 0 else 0
+
     return {
-        "upvote_count": updated["upvote_count"],
-        "downvote_count": updated["downvote_count"],
+        "vote_sum": vote_sum,
+        "vote_count": vote_count,
+        "average": average,
+        "display_level": round(average),
         "user_vote": None,
     }
 
