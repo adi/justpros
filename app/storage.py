@@ -1,5 +1,6 @@
 import hashlib
 import os
+import secrets
 
 import boto3
 from botocore.config import Config
@@ -100,8 +101,8 @@ def generate_avatar_upload_url(user_id: int, content_type: str) -> dict:
     ext = IMAGE_EXTENSION_MAP.get(content_type)
     if ext is None:
         raise ValueError(f"Unsupported content type: {content_type}")
-    hashed_id = _hash_user_id(user_id)
-    path = f"avatars/{hashed_id}.{ext}"
+    random_id = secrets.token_hex(16)
+    path = f"avatars/{random_id}.{ext}"
     return {"upload_url": _generate_upload_url(path, content_type), "media_path": path}
 
 
@@ -110,8 +111,8 @@ def generate_cover_upload_url(user_id: int, content_type: str) -> dict:
     ext = IMAGE_EXTENSION_MAP.get(content_type)
     if ext is None:
         raise ValueError(f"Unsupported content type: {content_type}")
-    hashed_id = _hash_user_id(user_id)
-    path = f"covers/{hashed_id}.{ext}"
+    random_id = secrets.token_hex(16)
+    path = f"covers/{random_id}.{ext}"
     return {"upload_url": _generate_upload_url(path, content_type), "media_path": path}
 
 
