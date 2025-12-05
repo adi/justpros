@@ -802,7 +802,7 @@ async def vote_on_post(
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
-    # Can't vote on own posts
+    # Can't vote on own posts/comments
     if post["author_id"] == user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot vote on your own post")
 

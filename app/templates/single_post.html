@@ -109,11 +109,43 @@
     function renderScaleIcon(level, size = 24) {
         const displayLevel = Math.round(Math.max(-3, Math.min(3, level)));
         const color = getScaleColor(displayLevel);
-        const rotation = displayLevel * 10;
+        // Tilt: positive = right pan lower, negative = left pan lower
+        const tiltAngle = displayLevel * 8; // -24 to +24 degrees
+        const tiltRad = tiltAngle * Math.PI / 180;
+        // Beam pivot is at center (12, 6), beam half-length is 8
+        const beamHalf = 8;
+        const leftX = 12 - beamHalf * Math.cos(tiltRad);
+        const leftY = 6 - beamHalf * Math.sin(tiltRad);
+        const rightX = 12 + beamHalf * Math.cos(tiltRad);
+        const rightY = 6 + beamHalf * Math.sin(tiltRad);
+        // Chain length
+        const chainLen = 4;
+        const leftPanY = leftY + chainLen;
+        const rightPanY = rightY + chainLen;
         return `
-            <svg width="${size}" height="${size}" viewBox="0 0 24 24"
-                 style="transform: rotate(${rotation}deg); transition: transform 0.2s ease-out;">
-                <path fill="${color}" d="M12 3v1l-4.5 2H5v3h2v1H5.5L4 11.5V13h2l1.5 2H12v5h1v-5h3.5l1.5-2h2v-1.5L18.5 10H17V9h2V7h-2.5L12 5V3zm0 4l3 1.5V10H9V8.5L12 7z"/>
+            <svg width="${size}" height="${size}" viewBox="0 0 24 24">
+                <!-- Base -->
+                <rect x="8" y="20" width="8" height="2" rx="1" fill="${color}"/>
+                <!-- Center pillar (always vertical) -->
+                <rect x="11" y="6" width="2" height="14" fill="${color}"/>
+                <!-- Pivot point -->
+                <circle cx="12" cy="6" r="2" fill="${color}"/>
+                <!-- Beam (tilts) -->
+                <line x1="${leftX.toFixed(1)}" y1="${leftY.toFixed(1)}"
+                      x2="${rightX.toFixed(1)}" y2="${rightY.toFixed(1)}"
+                      stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+                <!-- Left chain -->
+                <line x1="${leftX.toFixed(1)}" y1="${leftY.toFixed(1)}"
+                      x2="${leftX.toFixed(1)}" y2="${leftPanY.toFixed(1)}"
+                      stroke="${color}" stroke-width="1"/>
+                <!-- Right chain -->
+                <line x1="${rightX.toFixed(1)}" y1="${rightY.toFixed(1)}"
+                      x2="${rightX.toFixed(1)}" y2="${rightPanY.toFixed(1)}"
+                      stroke="${color}" stroke-width="1"/>
+                <!-- Left pan -->
+                <ellipse cx="${leftX.toFixed(1)}" cy="${(leftPanY + 1).toFixed(1)}" rx="3" ry="1.5" fill="${color}"/>
+                <!-- Right pan -->
+                <ellipse cx="${rightX.toFixed(1)}" cy="${(rightPanY + 1).toFixed(1)}" rx="3" ry="1.5" fill="${color}"/>
             </svg>
         `;
     }
@@ -136,11 +168,7 @@
         return `
             <div class="vote-picker absolute left-0 mt-2 bg-white shadow-lg rounded-xl p-3 z-50 border border-gray-200"
                  onclick="event.stopPropagation()">
-                <div class="flex items-center gap-1">
-                    <div class="h-1.5 w-full rounded-full mr-2"
-                         style="background: linear-gradient(to right, #dc2626, #f87171, #9ca3af, #4ade80, #16a34a)"></div>
-                </div>
-                <div class="flex items-center justify-between gap-1 mt-2">
+                <div class="flex items-center justify-between gap-1">
                     ${buttons}
                 </div>
                 <div class="text-center text-xs text-gray-400 mt-2">
@@ -219,9 +247,8 @@
                     <div class="flex items-center gap-4 mt-3 text-sm">
                         <div class="relative" id="vote-container-${post.id}">
                             <button class="flex items-center gap-1.5 ${voteButtonClass}" ${canVote ? `onclick="toggleVotePicker(${post.id}, event)"` : ''}>
-                                <span id="scale-icon-${post.id}">${renderScaleIcon(post.display_level || 0, 24)}</span>
-                                <span id="vote-count-${post.id}" class="text-gray-500">${post.vote_count > 0 ? post.vote_count : ''}</span>
-                                ${post.user_vote !== null ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 bg-brand-blue rounded-full"></span>' : ''}
+                                <span id="scale-icon-${post.id}" class="${post.user_vote !== null ? 'ring-2 ring-brand-blue ring-offset-1 rounded-full' : ''}">${renderScaleIcon(post.display_level || 0, 24)}</span>
+                                <span id="vote-count-${post.id}" class="text-gray-500">${post.vote_count}</span>
                             </button>
                             <div id="vote-picker-${post.id}" class="hidden"></div>
                         </div>
@@ -348,9 +375,8 @@
                         <div class="flex items-center gap-3 mt-2 text-xs">
                             <div class="relative" id="vote-container-${comment.id}">
                                 <button class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="toggleVotePicker(${comment.id}, event)"` : ''}>
-                                    <span id="scale-icon-${comment.id}">${renderScaleIcon(comment.display_level || 0, 20)}</span>
-                                    <span id="vote-count-${comment.id}" class="text-gray-500">${comment.vote_count > 0 ? comment.vote_count : ''}</span>
-                                    ${comment.user_vote !== null ? '<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-brand-blue rounded-full"></span>' : ''}
+                                    <span id="scale-icon-${comment.id}" class="${comment.user_vote !== null ? 'ring-2 ring-brand-blue ring-offset-1 rounded-full' : ''}">${renderScaleIcon(comment.display_level || 0, 20)}</span>
+                                    <span id="vote-count-${comment.id}" class="text-gray-500">${comment.vote_count}</span>
                                 </button>
                                 <div id="vote-picker-${comment.id}" class="hidden"></div>
                             </div>
@@ -486,11 +512,12 @@
     function toggleVotePicker(postId, event) {
         event.stopPropagation();
         const picker = document.getElementById(`vote-picker-${postId}`);
+        if (!picker) return;
 
         // Close any other open pickers
-        document.querySelectorAll('.vote-picker').forEach(p => {
+        document.querySelectorAll('[id^="vote-picker-"]').forEach(p => {
             if (p.id !== `vote-picker-${postId}`) {
-                p.parentElement.classList.add('hidden');
+                p.classList.add('hidden');
             }
         });
 
@@ -541,24 +568,21 @@
     function updateScaleDisplay(postId, data) {
         currentUserVotes[postId] = data.user_vote;
 
+        // Update scale icon and ring indicator
         const iconEl = document.getElementById(`scale-icon-${postId}`);
         if (iconEl) {
             iconEl.innerHTML = renderScaleIcon(data.display_level, 24);
+            if (data.user_vote !== null) {
+                iconEl.className = 'ring-2 ring-brand-blue ring-offset-1 rounded-full';
+            } else {
+                iconEl.className = '';
+            }
         }
 
+        // Update vote count (always show)
         const countEl = document.getElementById(`vote-count-${postId}`);
         if (countEl) {
-            countEl.textContent = data.vote_count > 0 ? data.vote_count : '';
-        }
-
-        const container = document.getElementById(`vote-container-${postId}`);
-        const existingDot = container.querySelector('.bg-brand-blue.rounded-full');
-        if (data.user_vote !== null && !existingDot) {
-            const dot = document.createElement('span');
-            dot.className = 'absolute -top-0.5 -right-0.5 w-2 h-2 bg-brand-blue rounded-full';
-            container.querySelector('button').appendChild(dot);
-        } else if (data.user_vote === null && existingDot) {
-            existingDot.remove();
+            countEl.textContent = data.vote_count;
         }
     }
 
