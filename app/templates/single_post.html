@@ -300,8 +300,42 @@
         `;
     }
 
+    const TEXT_EMOJIS = {
+        ':)': '😊', ':-)': '😊', ':]': '😊',
+        ':D': '😄', ':-D': '😄',
+        ';)': '😉', ';-)': '😉',
+        ':P': '😛', ':-P': '😛', ':p': '😛', ':-p': '😛',
+        ':(': '😞', ':-(': '😞', ':[': '😞',
+        ":'(": '😢', ":'-(": '😢',
+        ':O': '😮', ':-O': '😮', ':o': '😮', ':-o': '😮',
+        'XD': '😆', 'xD': '😆',
+        '<3': '❤️',
+        ':*': '😘', ':-*': '😘',
+        'B)': '😎', 'B-)': '😎',
+        ':/': '😕', ':-/': '😕',
+        ':S': '😖', ':-S': '😖', ':s': '😖', ':-s': '😖',
+        '>:(': '😠', '>:-(': '😠',
+        'O:)': '😇', 'O:-)': '😇',
+        '>:)': '😈', '>:-)': '😈',
+        ':|': '😐', ':-|': '😐',
+        '^_^': '😊', '^-^': '😊',
+        '-_-': '😑',
+        'T_T': '😭', 'T-T': '😭',
+        ':3': '😺',
+    };
+
+    function convertTextEmojis(text) {
+        const sorted = Object.keys(TEXT_EMOJIS).sort((a, b) => b.length - a.length);
+        for (const emoticon of sorted) {
+            text = text.split(emoticon).join(TEXT_EMOJIS[emoticon]);
+        }
+        return text;
+    }
+
     function formatContent(content) {
         let escaped = escapeHtml(content);
+        // Convert text emoticons to emojis
+        escaped = convertTextEmojis(escaped);
         // Convert URLs to clickable links (nofollow to prevent reputation transfer)
         escaped = escaped.replace(
             /(https?:\/\/[^\s<]+[^\s<.,;:!?\]\)"'])/gi,
