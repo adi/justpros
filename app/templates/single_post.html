@@ -665,7 +665,7 @@
                 title: 'Post on JustPros',
                 url: url
             }).catch(() => {
-                copyToClipboard(url);
+                // User cancelled - do nothing
             });
         } else {
             copyToClipboard(url);
@@ -674,7 +674,7 @@
 
     function copyToClipboard(text) {
         navigator.clipboard.writeText(text).then(() => {
-            alert('Link copied to clipboard!');
+            // Silent success
         }).catch(() => {
             const textarea = document.createElement('textarea');
             textarea.value = text;
@@ -682,7 +682,6 @@
             textarea.select();
             document.execCommand('copy');
             document.body.removeChild(textarea);
-            alert('Link copied to clipboard!');
         });
     }
 
