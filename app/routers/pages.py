@@ -39,11 +39,6 @@ async def terms_page(request: Request) -> HTMLResponse:
     return request.app.state.templates.TemplateResponse(request, "terms.html")
 
 
-@router.api_route("/profile", methods=["GET", "HEAD"], response_class=HTMLResponse)
-async def profile_page(request: Request) -> HTMLResponse:
-    return request.app.state.templates.TemplateResponse(request, "profile.html")
-
-
 @router.api_route("/settings", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def settings_page(request: Request) -> HTMLResponse:
     return request.app.state.templates.TemplateResponse(request, "settings.html")

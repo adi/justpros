@@ -11,24 +11,119 @@
 <div class="mt-2 w-full">
     <div class="bg-white rounded-lg shadow overflow-hidden">
         <!-- Cover Image -->
-        <div id="cover-image" class="h-48 bg-gray-300 bg-cover bg-center"></div>
+        <div id="cover-container" class="relative group">
+            <div id="cover-image" class="h-48 bg-gray-300 bg-cover bg-center"></div>
+            <!-- Owner: Edit overlay for cover -->
+            <div id="cover-edit-overlay" class="hidden absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all">
+                <div class="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <input type="file" id="cover-input" accept="image/jpeg,image/png,image/webp" class="hidden">
+                    <button onclick="document.getElementById('cover-input').click()" class="p-2 bg-white rounded-full shadow hover:bg-gray-100" title="Change cover">
+                        <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </button>
+                    <button id="cover-delete-btn" onclick="deleteCover()" class="hidden p-2 bg-white rounded-full shadow hover:bg-red-50" title="Delete cover">
+                        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="cover-message" class="absolute bottom-2 left-2 text-sm"></div>
+        </div>
 
         <!-- Profile Header -->
         <div class="relative px-6 pb-6">
-            <!-- Avatar overlapping cover -->
-            <div class="absolute -top-16 left-6">
+            <!-- Avatar -->
+            <div id="avatar-container" class="absolute -top-16 left-6 group">
                 <img id="avatar-image" src="/static/default-avatar.svg" alt="Avatar"
                     class="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg bg-white">
+                <!-- Owner: Edit overlay for avatar -->
+                <div id="avatar-edit-overlay" class="hidden absolute inset-0 rounded-full bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center">
+                    <input type="file" id="avatar-input" accept="image/jpeg,image/png,image/webp" class="hidden">
+                    <button onclick="document.getElementById('avatar-input').click()" class="opacity-0 group-hover:opacity-100 transition-opacity p-2 bg-white rounded-full shadow hover:bg-gray-100" title="Change photo">
+                        <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </button>
+                </div>
+                <button id="avatar-delete-btn" onclick="deleteAvatar()" class="hidden absolute -bottom-1 -right-1 p-1.5 bg-white rounded-full shadow border border-gray-200 hover:bg-red-50" title="Delete photo">
+                    <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+                <div id="avatar-message" class="absolute -bottom-6 left-0 text-xs whitespace-nowrap"></div>
             </div>
 
             <!-- Profile Info -->
             <div class="pt-20">
                 <div class="flex items-start justify-between gap-4">
                     <div class="flex-1 min-w-0">
-                        <h1 id="profile-name" class="text-2xl font-bold text-gray-900"></h1>
-                        <p id="profile-headline" class="text-gray-600 mt-1"></p>
+                        <!-- Name display/edit -->
+                        <div id="name-display" class="group flex items-center gap-2">
+                            <h1 id="profile-name" class="text-2xl font-bold text-gray-900"></h1>
+                            <button id="name-edit-btn" onclick="startEditing('name')" class="hidden opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit name">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="name-edit-form" class="hidden">
+                            <div class="flex flex-wrap gap-2 items-center">
+                                <input type="text" id="edit-first-name" placeholder="First name" class="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue w-28">
+                                <input type="text" id="edit-middle-name" placeholder="Middle" class="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue w-24">
+                                <input type="text" id="edit-last-name" placeholder="Last name" class="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue w-28">
+                                <button onclick="saveName()" class="px-3 py-1 bg-brand-blue text-white rounded text-sm hover:opacity-90">Save</button>
+                                <button onclick="cancelEditing('name')" class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">Cancel</button>
+                            </div>
+                            <p id="name-error" class="text-red-600 text-sm mt-1 hidden"></p>
+                        </div>
+
+                        <!-- Handle display/edit -->
+                        <div id="handle-display" class="group flex items-center gap-2 mt-1">
+                            <p id="profile-handle" class="text-gray-500"></p>
+                            <button id="handle-edit-btn" onclick="startEditing('handle')" class="hidden opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit handle">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="handle-edit-form" class="hidden mt-1">
+                            <div class="flex flex-wrap gap-2 items-center">
+                                <div class="relative">
+                                    <span class="absolute left-2 top-1.5 text-gray-400 text-sm">@</span>
+                                    <input type="text" id="edit-handle" placeholder="handle" pattern="[a-z0-9_]+" maxlength="30" class="pl-6 pr-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue w-40">
+                                </div>
+                                <button onclick="checkHandle()" class="px-2 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">Check</button>
+                                <button onclick="saveHandle()" class="px-3 py-1 bg-brand-blue text-white rounded text-sm hover:opacity-90">Save</button>
+                                <button onclick="cancelEditing('handle')" class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">Cancel</button>
+                            </div>
+                            <p id="handle-status" class="text-sm mt-1"></p>
+                        </div>
+
+                        <!-- Headline display/edit -->
+                        <div id="headline-display" class="group flex items-center gap-2 mt-1">
+                            <p id="profile-headline" class="text-gray-600"></p>
+                            <button id="headline-edit-btn" onclick="startEditing('headline')" class="hidden opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit headline">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="headline-edit-form" class="hidden mt-1">
+                            <div class="flex flex-wrap gap-2 items-center">
+                                <input type="text" id="edit-headline" placeholder="What do you do?" maxlength="200" class="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue w-64">
+                                <button onclick="saveHeadline()" class="px-3 py-1 bg-brand-blue text-white rounded text-sm hover:opacity-90">Save</button>
+                                <button onclick="cancelEditing('headline')" class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">Cancel</button>
+                            </div>
+                            <p id="headline-error" class="text-red-600 text-sm mt-1 hidden"></p>
+                        </div>
                     </div>
-                    <div class="flex gap-2 flex-shrink-0">
+
+                    <!-- Action buttons (for non-owners) -->
+                    <div id="action-buttons" class="flex gap-2 flex-shrink-0">
                         <a id="message-btn" href="#" class="hidden px-4 py-2 border border-brand-blue text-brand-blue rounded-md text-sm font-medium hover:bg-blue-50">
                             Message
                         </a>
@@ -38,8 +133,24 @@
                     </div>
                 </div>
 
-                <!-- Skills -->
-                <div id="profile-skills" class="flex flex-wrap gap-2 mt-4"></div>
+                <!-- Skills display/edit -->
+                <div id="skills-display" class="group flex items-center gap-2 mt-4">
+                    <div id="profile-skills" class="flex flex-wrap gap-2"></div>
+                    <button id="skills-edit-btn" onclick="startEditing('skills')" class="hidden opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit skills">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div id="skills-edit-form" class="hidden mt-4">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <input type="text" id="edit-skills" placeholder="Python, FastAPI, Design (comma-separated)" class="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue w-80">
+                        <button onclick="saveSkills()" class="px-3 py-1 bg-brand-blue text-white rounded text-sm hover:opacity-90">Save</button>
+                        <button onclick="cancelEditing('skills')" class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">Cancel</button>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Separate skills with commas</p>
+                    <p id="skills-error" class="text-red-600 text-sm mt-1 hidden"></p>
+                </div>
 
                 <!-- Connection status badge -->
                 <div id="connection-status" class="hidden mt-4">
@@ -116,8 +227,13 @@
 
 <script>
     const handle = '{{ handle }}';
+    let profileData = null;
+    let ownerData = null;
+    let isOwner = false;
     let profileName = '';
     let conversationState = null;
+    let handleAvailable = null;
+    let editingSection = null;
 
     function parseJwt(token) {
         try {
@@ -125,6 +241,49 @@
         } catch {
             return null;
         }
+    }
+
+    async function checkOwnership() {
+        const token = localStorage.getItem('token');
+        if (!token) return false;
+
+        const payload = parseJwt(token);
+        if (!payload || payload.exp * 1000 <= Date.now()) return false;
+
+        try {
+            const res = await fetch('/api/me', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                ownerData = await res.json();
+                isOwner = ownerData.handle === handle;
+                return isOwner;
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    function showOwnerControls() {
+        // Show edit overlays
+        document.getElementById('cover-edit-overlay').classList.remove('hidden');
+        document.getElementById('avatar-edit-overlay').classList.remove('hidden');
+
+        // Show edit buttons
+        document.getElementById('name-edit-btn').classList.remove('hidden');
+        document.getElementById('handle-edit-btn').classList.remove('hidden');
+        document.getElementById('headline-edit-btn').classList.remove('hidden');
+        document.getElementById('skills-edit-btn').classList.remove('hidden');
+
+        // Show delete buttons if images exist
+        if (profileData.cover_url) {
+            document.getElementById('cover-delete-btn').classList.remove('hidden');
+        }
+        if (profileData.avatar_url) {
+            document.getElementById('avatar-delete-btn').classList.remove('hidden');
+        }
+
+        // Hide connection buttons for own profile
+        document.getElementById('action-buttons').classList.add('hidden');
     }
 
     async function loadPublicProfile() {
@@ -141,39 +300,482 @@
                 return;
             }
 
-            const data = await response.json();
-            profileName = data.name || handle;
+            profileData = await response.json();
+            profileName = profileData.name || handle;
 
             document.getElementById('profile-name').textContent = profileName;
-            document.getElementById('profile-headline').textContent = data.headline || '';
+            document.getElementById('profile-handle').textContent = '@' + handle;
+            document.getElementById('profile-headline').textContent = profileData.headline || '';
             document.getElementById('modal-name').textContent = profileName;
             document.getElementById('pending-name').textContent = profileName;
 
-            if (data.avatar_url) {
-                document.getElementById('avatar-image').src = data.avatar_url;
+            if (profileData.avatar_url) {
+                document.getElementById('avatar-image').src = profileData.avatar_url;
             }
 
-            if (data.cover_url) {
-                document.getElementById('cover-image').style.backgroundImage = `url(${data.cover_url})`;
+            if (profileData.cover_url) {
+                document.getElementById('cover-image').style.backgroundImage = `url(${profileData.cover_url})`;
             }
 
             const skillsContainer = document.getElementById('profile-skills');
-            if (data.skills && data.skills.length > 0) {
-                skillsContainer.innerHTML = data.skills.map(skill =>
-                    `<span class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">${skill}</span>`
+            if (profileData.skills && profileData.skills.length > 0) {
+                skillsContainer.innerHTML = profileData.skills.map(skill =>
+                    `<span class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">${escapeHtml(skill)}</span>`
                 ).join('');
+            } else {
+                skillsContainer.innerHTML = '<span class="text-gray-400 text-sm">No skills added</span>';
             }
 
-            if (data.name) {
-                document.title = `${data.name} | JustPros`;
+            if (profileData.name) {
+                document.title = `${profileData.name} | JustPros`;
             }
 
-            // Load connection buttons
-            await updateButtons();
+            // Check ownership and show controls
+            await checkOwnership();
+            if (isOwner) {
+                showOwnerControls();
+            } else {
+                await updateButtons();
+            }
         } catch (error) {
             console.error('Failed to load profile:', error);
         }
     }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // --- Inline Editing ---
+
+    function startEditing(section) {
+        if (editingSection && editingSection !== section) {
+            cancelEditing(editingSection);
+        }
+        editingSection = section;
+
+        document.getElementById(`${section}-display`).classList.add('hidden');
+        document.getElementById(`${section}-edit-form`).classList.remove('hidden');
+
+        // Pre-fill values
+        if (section === 'name') {
+            // Need to get first/middle/last from ownerData
+            document.getElementById('edit-first-name').value = ownerData.first_name || '';
+            document.getElementById('edit-middle-name').value = ownerData.middle_name || '';
+            document.getElementById('edit-last-name').value = ownerData.last_name || '';
+            document.getElementById('edit-first-name').focus();
+        } else if (section === 'handle') {
+            document.getElementById('edit-handle').value = handle;
+            document.getElementById('edit-handle').dataset.original = handle;
+            document.getElementById('handle-status').textContent = '';
+            handleAvailable = true;
+            document.getElementById('edit-handle').focus();
+        } else if (section === 'headline') {
+            document.getElementById('edit-headline').value = profileData.headline || '';
+            document.getElementById('edit-headline').focus();
+        } else if (section === 'skills') {
+            document.getElementById('edit-skills').value = (profileData.skills || []).join(', ');
+            document.getElementById('edit-skills').focus();
+        }
+    }
+
+    function cancelEditing(section) {
+        document.getElementById(`${section}-display`).classList.remove('hidden');
+        document.getElementById(`${section}-edit-form`).classList.add('hidden');
+        // Hide any error messages
+        const errorEl = document.getElementById(`${section}-error`);
+        if (errorEl) errorEl.classList.add('hidden');
+        editingSection = null;
+    }
+
+    async function saveName() {
+        const token = localStorage.getItem('token');
+        const firstName = document.getElementById('edit-first-name').value.trim();
+        const middleName = document.getElementById('edit-middle-name').value.trim();
+        const lastName = document.getElementById('edit-last-name').value.trim();
+        const errorEl = document.getElementById('name-error');
+
+        try {
+            const response = await fetch('/api/me', {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    first_name: firstName || null,
+                    middle_name: middleName || null,
+                    last_name: lastName || null
+                })
+            });
+
+            if (response.ok) {
+                // Update local data and display
+                ownerData.first_name = firstName;
+                ownerData.middle_name = middleName;
+                ownerData.last_name = lastName;
+                const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
+                profileData.name = fullName;
+                document.getElementById('profile-name').textContent = fullName || handle;
+                cancelEditing('name');
+            } else {
+                const data = await response.json();
+                errorEl.textContent = data.detail || 'Failed to save';
+                errorEl.classList.remove('hidden');
+            }
+        } catch (e) {
+            errorEl.textContent = 'Failed to save';
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    async function checkHandle() {
+        const token = localStorage.getItem('token');
+        const newHandle = document.getElementById('edit-handle').value.toLowerCase();
+        const original = document.getElementById('edit-handle').dataset.original;
+        const statusEl = document.getElementById('handle-status');
+
+        if (!newHandle) {
+            statusEl.textContent = '';
+            handleAvailable = null;
+            return;
+        }
+
+        if (!/^[a-z0-9_]+$/.test(newHandle)) {
+            statusEl.textContent = 'Only lowercase letters, numbers, and underscores allowed';
+            statusEl.className = 'text-sm mt-1 text-red-600';
+            handleAvailable = false;
+            return;
+        }
+
+        if (newHandle.length < 3) {
+            statusEl.textContent = 'Handle must be at least 3 characters';
+            statusEl.className = 'text-sm mt-1 text-red-600';
+            handleAvailable = false;
+            return;
+        }
+
+        if (newHandle === original) {
+            statusEl.textContent = 'This is your current handle';
+            statusEl.className = 'text-sm mt-1 text-gray-500';
+            handleAvailable = true;
+            return;
+        }
+
+        statusEl.textContent = 'Checking...';
+        statusEl.className = 'text-sm mt-1 text-gray-500';
+
+        try {
+            const response = await fetch(`/api/handle/check?handle=${encodeURIComponent(newHandle)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.status === 429) {
+                statusEl.textContent = 'Too many checks. Please wait.';
+                statusEl.className = 'text-sm mt-1 text-red-600';
+                handleAvailable = null;
+                return;
+            }
+
+            const data = await response.json();
+            if (data.available) {
+                statusEl.textContent = 'Available!';
+                statusEl.className = 'text-sm mt-1 text-green-600';
+                handleAvailable = true;
+            } else {
+                statusEl.textContent = 'Already taken';
+                statusEl.className = 'text-sm mt-1 text-red-600';
+                handleAvailable = false;
+            }
+        } catch (error) {
+            statusEl.textContent = 'Error checking handle';
+            statusEl.className = 'text-sm mt-1 text-red-600';
+            handleAvailable = null;
+        }
+    }
+
+    async function saveHandle() {
+        const token = localStorage.getItem('token');
+        const newHandle = document.getElementById('edit-handle').value.toLowerCase();
+        const statusEl = document.getElementById('handle-status');
+
+        if (handleAvailable === false) {
+            statusEl.textContent = 'Please choose an available handle';
+            statusEl.className = 'text-sm mt-1 text-red-600';
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/me', {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ handle: newHandle })
+            });
+
+            if (response.ok) {
+                // Redirect to new handle URL
+                window.location.href = `/u/${newHandle}`;
+            } else {
+                const data = await response.json();
+                statusEl.textContent = data.detail || 'Failed to save';
+                statusEl.className = 'text-sm mt-1 text-red-600';
+            }
+        } catch (e) {
+            statusEl.textContent = 'Failed to save';
+            statusEl.className = 'text-sm mt-1 text-red-600';
+        }
+    }
+
+    async function saveHeadline() {
+        const token = localStorage.getItem('token');
+        const headline = document.getElementById('edit-headline').value.trim();
+        const errorEl = document.getElementById('headline-error');
+
+        try {
+            const response = await fetch('/api/me', {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ headline: headline || null })
+            });
+
+            if (response.ok) {
+                profileData.headline = headline;
+                document.getElementById('profile-headline').textContent = headline;
+                cancelEditing('headline');
+            } else {
+                const data = await response.json();
+                errorEl.textContent = data.detail || 'Failed to save';
+                errorEl.classList.remove('hidden');
+            }
+        } catch (e) {
+            errorEl.textContent = 'Failed to save';
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    async function saveSkills() {
+        const token = localStorage.getItem('token');
+        const skillsInput = document.getElementById('edit-skills').value;
+        const skills = skillsInput.split(',').map(s => s.trim()).filter(s => s.length > 0);
+        const errorEl = document.getElementById('skills-error');
+
+        try {
+            const response = await fetch('/api/me', {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ skills })
+            });
+
+            if (response.ok) {
+                profileData.skills = skills;
+                const skillsContainer = document.getElementById('profile-skills');
+                if (skills.length > 0) {
+                    skillsContainer.innerHTML = skills.map(skill =>
+                        `<span class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">${escapeHtml(skill)}</span>`
+                    ).join('');
+                } else {
+                    skillsContainer.innerHTML = '<span class="text-gray-400 text-sm">No skills added</span>';
+                }
+                cancelEditing('skills');
+            } else {
+                const data = await response.json();
+                errorEl.textContent = data.detail || 'Failed to save';
+                errorEl.classList.remove('hidden');
+            }
+        } catch (e) {
+            errorEl.textContent = 'Failed to save';
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    // --- Image Upload ---
+
+    document.getElementById('cover-input').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.size > 5 * 1024 * 1024) {
+            document.getElementById('cover-message').innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">File too large (max 5MB)</span>';
+            return;
+        }
+
+        const token = localStorage.getItem('token');
+        const messageEl = document.getElementById('cover-message');
+        messageEl.innerHTML = '<span class="text-white bg-black bg-opacity-50 px-2 py-1 rounded">Uploading...</span>';
+
+        try {
+            const urlRes = await fetch('/api/me/cover/upload-url', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content_type: file.type })
+            });
+
+            if (!urlRes.ok) {
+                const data = await urlRes.json();
+                messageEl.innerHTML = `<span class="text-red-600 bg-white px-2 py-1 rounded">${data.detail || 'Failed'}</span>`;
+                return;
+            }
+
+            const { upload_url, media_path } = await urlRes.json();
+
+            const uploadRes = await fetch(upload_url, {
+                method: 'PUT',
+                headers: { 'Content-Type': file.type },
+                body: file
+            });
+
+            if (!uploadRes.ok) {
+                messageEl.innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">Upload failed</span>';
+                return;
+            }
+
+            const confirmRes = await fetch('/api/me/cover/confirm', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ media_path })
+            });
+
+            if (confirmRes.ok) {
+                const data = await confirmRes.json();
+                document.getElementById('cover-image').style.backgroundImage = `url(${data.cover_url})`;
+                profileData.cover_url = data.cover_url;
+                document.getElementById('cover-delete-btn').classList.remove('hidden');
+                messageEl.innerHTML = '<span class="text-green-600 bg-white px-2 py-1 rounded">Updated!</span>';
+                setTimeout(() => messageEl.innerHTML = '', 2000);
+            } else {
+                messageEl.innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">Failed</span>';
+            }
+        } catch (error) {
+            messageEl.innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">Failed</span>';
+        }
+        e.target.value = '';
+    });
+
+    document.getElementById('avatar-input').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.size > 2 * 1024 * 1024) {
+            document.getElementById('avatar-message').innerHTML = '<span class="text-red-600">Too large (max 2MB)</span>';
+            return;
+        }
+
+        const token = localStorage.getItem('token');
+        const messageEl = document.getElementById('avatar-message');
+        messageEl.innerHTML = '<span class="text-gray-500">Uploading...</span>';
+
+        try {
+            const urlRes = await fetch('/api/me/avatar/upload-url', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content_type: file.type })
+            });
+
+            if (!urlRes.ok) {
+                const data = await urlRes.json();
+                messageEl.innerHTML = `<span class="text-red-600">${data.detail || 'Failed'}</span>`;
+                return;
+            }
+
+            const { upload_url, media_path } = await urlRes.json();
+
+            const uploadRes = await fetch(upload_url, {
+                method: 'PUT',
+                headers: { 'Content-Type': file.type },
+                body: file
+            });
+
+            if (!uploadRes.ok) {
+                messageEl.innerHTML = '<span class="text-red-600">Upload failed</span>';
+                return;
+            }
+
+            const confirmRes = await fetch('/api/me/avatar/confirm', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ media_path })
+            });
+
+            if (confirmRes.ok) {
+                const data = await confirmRes.json();
+                document.getElementById('avatar-image').src = data.avatar_url;
+                profileData.avatar_url = data.avatar_url;
+                document.getElementById('avatar-delete-btn').classList.remove('hidden');
+                messageEl.innerHTML = '<span class="text-green-600">Updated!</span>';
+                setTimeout(() => messageEl.innerHTML = '', 2000);
+            } else {
+                messageEl.innerHTML = '<span class="text-red-600">Failed</span>';
+            }
+        } catch (error) {
+            messageEl.innerHTML = '<span class="text-red-600">Failed</span>';
+        }
+        e.target.value = '';
+    });
+
+    async function deleteCover() {
+        if (!confirm('Delete your cover image?')) return;
+
+        const token = localStorage.getItem('token');
+        const messageEl = document.getElementById('cover-message');
+
+        try {
+            const response = await fetch('/api/me/cover', {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                document.getElementById('cover-image').style.backgroundImage = '';
+                document.getElementById('cover-delete-btn').classList.add('hidden');
+                profileData.cover_url = null;
+                messageEl.innerHTML = '<span class="text-green-600 bg-white px-2 py-1 rounded">Deleted</span>';
+                setTimeout(() => messageEl.innerHTML = '', 2000);
+            } else {
+                messageEl.innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">Failed</span>';
+            }
+        } catch (error) {
+            messageEl.innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">Failed</span>';
+        }
+    }
+
+    async function deleteAvatar() {
+        if (!confirm('Delete your profile photo?')) return;
+
+        const token = localStorage.getItem('token');
+        const messageEl = document.getElementById('avatar-message');
+
+        try {
+            const response = await fetch('/api/me/avatar', {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                document.getElementById('avatar-image').src = '/static/default-avatar.svg';
+                document.getElementById('avatar-delete-btn').classList.add('hidden');
+                profileData.avatar_url = null;
+                messageEl.innerHTML = '<span class="text-green-600">Deleted</span>';
+                setTimeout(() => messageEl.innerHTML = '', 2000);
+            } else {
+                messageEl.innerHTML = '<span class="text-red-600">Failed</span>';
+            }
+        } catch (error) {
+            messageEl.innerHTML = '<span class="text-red-600">Failed</span>';
+        }
+    }
+
+    // --- Connection Buttons (for non-owners) ---
 
     async function updateButtons() {
         const token = localStorage.getItem('token');
@@ -183,16 +785,6 @@
         if (!payload || payload.exp * 1000 <= Date.now()) return;
 
         try {
-            // Check if viewing own profile
-            const meResponse = await fetch('/api/me', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!meResponse.ok) return;
-
-            const me = await meResponse.json();
-            if (me.handle === handle) return; // Own profile
-
-            // Get conversation state
             const response = await fetch(`/api/messages/with/${encodeURIComponent(handle)}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -205,24 +797,20 @@
             const statusBadge = document.getElementById('connection-status');
 
             if (conversationState.is_connected) {
-                // Connected - show Message button and status badge
                 messageBtn.href = `/messages/${handle}`;
                 messageBtn.classList.remove('hidden');
                 statusBadge.classList.remove('hidden');
                 connectBtn.classList.add('hidden');
             } else if (conversationState.pending_request_from_them) {
-                // They sent me a request - show Respond button
                 connectBtn.textContent = 'Respond';
                 connectBtn.onclick = showPendingModal;
                 connectBtn.classList.remove('hidden');
             } else if (conversationState.pending_request_from_me) {
-                // I sent them a request - show pending status
                 connectBtn.textContent = 'Pending...';
                 connectBtn.disabled = true;
                 connectBtn.className = 'px-4 py-2 bg-gray-100 text-gray-500 rounded-md text-sm font-medium cursor-not-allowed';
                 connectBtn.classList.remove('hidden');
             } else {
-                // No connection - show Connect button
                 connectBtn.textContent = 'Connect';
                 connectBtn.onclick = showClaimModal;
                 connectBtn.classList.remove('hidden');
@@ -232,7 +820,8 @@
         }
     }
 
-    // Claim modal functions
+    // --- Modals ---
+
     function showClaimModal() {
         document.getElementById('claim-label').textContent = `Tell ${profileName} why you should be connected`;
         document.getElementById('claim-modal').classList.remove('hidden');
@@ -281,7 +870,6 @@
             }
 
             hideClaimModal();
-            // Redirect to messages to see the conversation
             window.location.href = `/messages/${handle}`;
         } catch (e) {
             errorEl.textContent = e.message;
@@ -291,9 +879,7 @@
         }
     });
 
-    // Pending claim modal functions
     async function showPendingModal() {
-        // Load the pending claim content
         const token = localStorage.getItem('token');
         try {
             const response = await fetch(`/api/messages/with/${encodeURIComponent(handle)}/messages`, {
@@ -302,7 +888,6 @@
             if (!response.ok) return;
 
             const data = await response.json();
-            // Find the pending connection request from them
             const pendingRequest = data.messages.find(m => m.kind === 'connection_request' && !m.is_mine);
             if (pendingRequest) {
                 document.getElementById('pending-content').textContent = pendingRequest.content;
@@ -364,15 +949,17 @@
         }
     }
 
-    // Close modals on escape key
+    // Close modals/editing on escape key
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             hideClaimModal();
             hidePendingModal();
+            if (editingSection) {
+                cancelEditing(editingSection);
+            }
         }
     });
 
-    // Close modals on backdrop click
     document.getElementById('claim-modal').addEventListener('click', (e) => {
         if (e.target === e.currentTarget) hideClaimModal();
     });

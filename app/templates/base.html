@@ -87,7 +87,7 @@
                         </span>
                     </button>
                     <div id="avatar-dropdown" class="hidden absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                        <a href="/profile" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Profile</a>
+                        <a id="nav-profile-link" href="/" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Profile</a>
                         <a href="/settings" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Settings</a>
                         <hr class="my-1 border-gray-200">
                         <button onclick="logout()" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Log out</button>
@@ -136,6 +136,9 @@
                             const data = await meResponse.json();
                             if (data.avatar_url) {
                                 document.getElementById('nav-avatar').src = data.avatar_url;
+                            }
+                            if (data.handle) {
+                                document.getElementById('nav-profile-link').href = `/u/${data.handle}`;
                             }
                         }
 
