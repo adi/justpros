@@ -89,7 +89,7 @@
                     <span id="pages-badge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-brand-pink text-white text-xs rounded-full flex items-center justify-center font-medium"></span>
                 </a>
                 <!-- Facts veto icon with badge (checkmark document) -->
-                <a href="/facts/pending" id="facts-nav-link" class="hidden relative text-gray-500 hover:text-gray-700" title="Facts to review">
+                <a href="/facts/pending" id="facts-nav-link" class="relative text-gray-500 hover:text-gray-700" title="Facts to review">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
@@ -208,13 +208,11 @@
                         // Update facts badge (pending veto)
                         if (factsResponse.ok) {
                             const factsData = await factsResponse.json();
-                            const factsNavLink = document.getElementById('facts-nav-link');
                             const factsBadge = document.getElementById('facts-badge');
                             if (factsData.count > 0) {
                                 const displayCount = factsData.count > 9 ? '9+' : factsData.count.toString();
                                 factsBadge.textContent = displayCount;
                                 factsBadge.classList.remove('hidden');
-                                factsNavLink.classList.remove('hidden');
                             }
                         }
                     } catch (e) {
