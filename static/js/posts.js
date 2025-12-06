@@ -232,9 +232,6 @@ function renderVotePicker(postId, userVote) {
             <div class="flex items-center gap-1.5">
                 ${voteButtons.join('')}
             </div>
-            <div class="text-center text-xs text-gray-400 mt-2">
-                Tap to vote • ✕ to remove
-            </div>
         </div>
     `;
 }
