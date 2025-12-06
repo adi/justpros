@@ -61,6 +61,48 @@ async def messages_conversation_page(request: Request, handle: str) -> HTMLRespo
     )
 
 
+@router.api_route("/pages", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def pages_list_page(request: Request) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(request, "pages_list.html")
+
+
+@router.api_route("/pages/new", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def pages_create_page(request: Request) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(request, "page_create.html")
+
+
+@router.api_route("/p/{handle}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def page_profile_page(request: Request, handle: str) -> HTMLResponse:
+    # Fetch page data for OG meta tags
+    page = await database.fetch_one(
+        """
+        SELECT handle, name, kind, headline, icon_path, cover_path
+        FROM pages WHERE handle = :handle
+        """,
+        {"handle": handle.lower()},
+    )
+
+    context = {"handle": handle}
+
+    if page:
+        context["name"] = page["name"]
+        context["headline"] = page["headline"] or ""
+        context["og_image"] = (
+            get_avatar_url(page["icon_path"]) if page["icon_path"] else None
+        )
+
+    return request.app.state.templates.TemplateResponse(
+        request, "page_profile.html", context
+    )
+
+
+@router.api_route("/p/{handle}/editors", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def page_editors_page(request: Request, handle: str) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(
+        request, "page_editors.html", {"handle": handle}
+    )
+
+
 @router.api_route("/u/{handle}/post/{post_id}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def single_post_page(request: Request, handle: str, post_id: int) -> HTMLResponse:
     """Single post view with comments - for shared post links."""

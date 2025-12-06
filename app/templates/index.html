@@ -29,13 +29,16 @@
                     <div id="media-preview" class="hidden flex flex-wrap gap-2 mt-2">
                     </div>
                     <div class="flex items-center justify-between mt-3">
-                        <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-3 flex-wrap">
                             <label class="cursor-pointer text-gray-500 hover:text-brand-blue" title="Add photo or video">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                 </svg>
                                 <input type="file" id="media-input" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" class="hidden" onchange="handleMediaSelect(event)">
                             </label>
+                            <select id="post-as" class="hidden text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                                <option value="">Yourself</option>
+                            </select>
                             <select id="post-visibility" class="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-blue">
                                 <option value="connections">Connections only</option>
                                 <option value="public">Public</option>
@@ -103,7 +106,15 @@
     let expandedPosts = new Set(); // Track which posts have comments expanded
     let loadedComments = {}; // Cache loaded comments by post ID
     let replyingTo = {}; // Track which comment we're replying to: { rootPostId: commentId }
+    let userPages = []; // Pages the user can post as (owner or editor)
     const COMMENT_TRUNCATE_LENGTH = 280; // Characters before truncating
+    const defaultPageIcons = {
+        company: '/static/default-page-company.svg',
+        event: '/static/default-page-event.svg',
+        product: '/static/default-page-product.svg',
+        community: '/static/default-page-community.svg',
+        virtual: '/static/default-page-virtual.svg'
+    };
 
     const composerPlaceholders = [
         "What's on your mind?",
@@ -147,11 +158,13 @@
             document.querySelector('#composer-collapsed input').placeholder = placeholder;
             document.getElementById('post-content').placeholder = placeholder;
 
-            // Get current user ID and avatar
+            // Get current user info and pages in parallel
             try {
-                const meResponse = await fetch('/api/me', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                const [meResponse, pagesResponse] = await Promise.all([
+                    fetch('/api/me', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/pages/my', { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+
                 if (meResponse.ok) {
                     const me = await meResponse.json();
                     currentUserId = me.id;
@@ -160,6 +173,11 @@
                         document.getElementById('composer-avatar-collapsed').src = me.avatar_url;
                         document.getElementById('composer-avatar-expanded').src = me.avatar_url;
                     }
+                }
+
+                if (pagesResponse.ok) {
+                    userPages = await pagesResponse.json();
+                    populatePostAsDropdown();
                 }
             } catch (e) {
                 console.error('Failed to get user:', e);
@@ -383,23 +401,54 @@
             </div>
         `;
 
+        // Page post header (if posting as a Page)
+        const isPagePost = post.page && post.page.handle;
+        const pageUrl = isPagePost ? `/p/${post.page.handle}` : '';
+        const pageIconUrl = isPagePost ? (post.page.icon_url || defaultPageIcons[post.page.kind] || defaultPageIcons.virtual) : '';
+
+        // Build header based on whether it's a page post or user post
+        let headerHtml;
+        if (isPagePost) {
+            headerHtml = `
+                <a href="${pageUrl}">
+                    <img src="${pageIconUrl}" alt="" class="w-10 h-10 rounded-lg object-cover bg-gray-200">
+                </a>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <a href="${pageUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.page.name)}</a>
+                        ${visibilityIcon}
+                        <span class="text-gray-400 text-sm">${timeStr}</span>
+                        ${postMenu}
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        Posted by <a href="${authorUrl}" class="hover:underline">${escapeHtml(post.author.name || post.author.handle)}</a>
+                    </div>
+                    <p class="text-gray-800 mt-2 whitespace-pre-wrap break-words">${formatContent(post.content)}</p>
+                </div>
+            `;
+        } else {
+            headerHtml = `
+                <a href="${authorUrl}">
+                    <img src="${avatarUrl}" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200">
+                </a>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <a href="${authorUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.author.name || post.author.handle)}</a>
+                        <span class="text-gray-400">@${post.author.handle}</span>
+                        ${visibilityIcon}
+                        <span class="text-gray-400 text-sm">${timeStr}</span>
+                        ${postMenu}
+                    </div>
+                    <p class="text-gray-800 mt-2 whitespace-pre-wrap break-words">${formatContent(post.content)}</p>
+                </div>
+            `;
+        }
+
         return `
             <div class="bg-white sm:rounded-lg shadow" data-post-id="${post.id}">
                 <div class="p-4">
                     <div class="flex items-start gap-3">
-                        <a href="${authorUrl}">
-                            <img src="${avatarUrl}" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200">
-                        </a>
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <a href="${authorUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.author.name || post.author.handle)}</a>
-                                <span class="text-gray-400">@${post.author.handle}</span>
-                                ${visibilityIcon}
-                                <span class="text-gray-400 text-sm">${timeStr}</span>
-                                ${postMenu}
-                            </div>
-                            <p class="text-gray-800 mt-2 whitespace-pre-wrap break-words">${formatContent(post.content)}</p>
-                        </div>
+                        ${headerHtml}
                     </div>
                     ${renderPostMedia(post.media)}
                     <div class="flex items-center gap-4 mt-3 text-sm">
@@ -539,6 +588,26 @@
         });
     }
 
+    function populatePostAsDropdown() {
+        const select = document.getElementById('post-as');
+        if (!select) return;
+
+        // Only show if user has pages
+        if (userPages.length === 0) {
+            select.classList.add('hidden');
+            return;
+        }
+
+        // Show the dropdown
+        select.classList.remove('hidden');
+
+        // Populate options
+        select.innerHTML = '<option value="">Yourself</option>' +
+            userPages.map(page =>
+                `<option value="${page.id}">${escapeHtml(page.name)}</option>`
+            ).join('');
+    }
+
     // Composer expand/collapse
     function expandComposer() {
         document.getElementById('composer-collapsed').classList.add('hidden');
@@ -556,6 +625,9 @@
     function cancelComposer() {
         document.getElementById('post-content').value = '';
         document.getElementById('post-chars').textContent = '0/2000';
+        // Reset post-as dropdown
+        const postAsSelect = document.getElementById('post-as');
+        if (postAsSelect) postAsSelect.value = '';
         clearPendingMedia();
         document.getElementById('composer-expanded').classList.add('hidden');
         document.getElementById('composer-collapsed').classList.remove('hidden');
@@ -707,6 +779,8 @@
         e.preventDefault();
         const content = document.getElementById('post-content').value.trim();
         const visibility = document.getElementById('post-visibility').value;
+        const postAsSelect = document.getElementById('post-as');
+        const pageId = postAsSelect && postAsSelect.value ? parseInt(postAsSelect.value) : null;
 
         if (!content && pendingMedia.length === 0) return;
 
@@ -717,13 +791,18 @@
         }
 
         try {
+            const postData = { content: content || ' ', visibility };
+            if (pageId) {
+                postData.page_id = pageId;
+            }
+
             const response = await fetch('/api/posts', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ content: content || ' ', visibility })
+                body: JSON.stringify(postData)
             });
 
             if (response.ok) {
@@ -736,6 +815,9 @@
 
                 document.getElementById('post-content').value = '';
                 document.getElementById('post-chars').textContent = '0/2000';
+                // Reset post-as dropdown
+                const postAsSelect = document.getElementById('post-as');
+                if (postAsSelect) postAsSelect.value = '';
                 clearPendingMedia();
                 collapseComposer();
                 // Reload feed to show new post

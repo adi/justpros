@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% block title %}Pages | JustPros{% endblock %}
+{% block content %}
+<div class="bg-white sm:rounded-lg shadow overflow-hidden">
+    <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+        <h1 class="text-xl font-bold text-gray-900">Pages</h1>
+        <a href="/pages/new" id="create-page-btn" class="hidden px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 text-sm">
+            Create Page
+        </a>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex border-b border-gray-200">
+        <button onclick="switchTab('invitations')" id="tab-invitations" class="flex-1 py-3 text-sm font-medium border-b-2 border-brand-blue text-brand-blue relative">
+            Invitations
+            <span id="invitations-count" class="hidden absolute top-1 right-1/4 w-5 h-5 bg-brand-pink text-white text-xs rounded-full flex items-center justify-center font-medium"></span>
+        </button>
+        <button onclick="switchTab('my-pages')" id="tab-my-pages" class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+            My Pages
+        </button>
+        <button onclick="switchTab('following')" id="tab-following" class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+            Following
+        </button>
+    </div>
+
+    <!-- Content -->
+    <div id="content" class="min-h-[400px]">
+        <div id="loading" class="flex items-center justify-center p-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue"></div>
+        </div>
+        <div id="list" class="hidden divide-y divide-gray-100"></div>
+        <div id="empty" class="hidden flex items-center justify-center p-8">
+            <p id="empty-message" class="text-gray-500 text-center"></p>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentTab = 'invitations';
+    let token = null;
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    const defaultIcons = {
+        company: '/static/default-page-company.svg',
+        event: '/static/default-page-event.svg',
+        product: '/static/default-page-product.svg',
+        community: '/static/default-page-community.svg',
+        virtual: '/static/default-page-virtual.svg'
+    };
+
+    const kindLabels = {
+        company: 'Company',
+        event: 'Event',
+        product: 'Product/Service',
+        community: 'Community',
+        virtual: 'Virtual Persona'
+    };
+
+    function getDefaultIcon(kind) {
+        return defaultIcons[kind] || defaultIcons.virtual;
+    }
+
+    function isTokenValid(token) {
+        if (!token) return false;
+        try {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const payload = JSON.parse(window.atob(base64));
+            return payload && payload.exp * 1000 > Date.now();
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function switchTab(tab) {
+        currentTab = tab;
+
+        // Update tab styles
+        document.querySelectorAll('[id^="tab-"]').forEach(t => {
+            t.classList.remove('border-brand-blue', 'text-brand-blue');
+            t.classList.add('border-transparent', 'text-gray-500');
+        });
+        document.getElementById(`tab-${tab}`).classList.remove('border-transparent', 'text-gray-500');
+        document.getElementById(`tab-${tab}`).classList.add('border-brand-blue', 'text-brand-blue');
+
+        loadData();
+    }
+
+    async function loadData() {
+        const loading = document.getElementById('loading');
+        const list = document.getElementById('list');
+        const empty = document.getElementById('empty');
+        const emptyMessage = document.getElementById('empty-message');
+
+        loading.classList.remove('hidden');
+        list.classList.add('hidden');
+        empty.classList.add('hidden');
+
+        try {
+            let endpoint = '';
+            switch (currentTab) {
+                case 'invitations':
+                    endpoint = '/api/pages/invitations';
+                    break;
+                case 'my-pages':
+                    endpoint = '/api/pages/my';
+                    break;
+                case 'following':
+                    endpoint = '/api/pages/following';
+                    break;
+            }
+
+            const response = await fetch(endpoint, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+                return;
+            }
+
+            const data = await response.json();
+
+            loading.classList.add('hidden');
+
+            if (data.length === 0) {
+                empty.classList.remove('hidden');
+                switch (currentTab) {
+                    case 'invitations':
+                        emptyMessage.textContent = 'No pending invitations.';
+                        break;
+                    case 'my-pages':
+                        emptyMessage.innerHTML = 'You don\'t own or edit any pages yet. <a href="/pages/new" class="text-brand-blue hover:underline">Create your first Page</a>';
+                        break;
+                    case 'following':
+                        emptyMessage.textContent = 'You\'re not following any pages yet.';
+                        break;
+                }
+            } else {
+                list.innerHTML = data.map(item => renderItem(item)).join('');
+                list.classList.remove('hidden');
+            }
+
+            // Update invitations badge
+            await updateInvitationsBadge();
+        } catch (error) {
+            console.error('Failed to load data:', error);
+            loading.classList.add('hidden');
+            empty.classList.remove('hidden');
+            emptyMessage.textContent = 'Failed to load. Please try again.';
+        }
+    }
+
+    async function updateInvitationsBadge() {
+        try {
+            const response = await fetch('/api/pages/invitations', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const badge = document.getElementById('invitations-count');
+                if (data.length > 0) {
+                    badge.textContent = data.length > 9 ? '9+' : data.length.toString();
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+        } catch (e) {}
+    }
+
+    function renderItem(item) {
+        // For invitations, item has a 'page' property
+        const page = item.page || item;
+        const iconUrl = page.icon_url || getDefaultIcon(page.kind);
+        const name = escapeHtml(page.name);
+        const handle = escapeHtml(page.handle);
+        const kindLabel = kindLabels[page.kind] || 'Page';
+        const headline = page.headline ? escapeHtml(page.headline) : '';
+
+        let actions = '';
+
+        switch (currentTab) {
+            case 'invitations':
+                actions = `
+                    <div class="flex gap-2 mt-2 sm:mt-0">
+                        <button onclick="acceptInvitation('${handle}')" class="px-3 py-1.5 bg-brand-blue text-white text-sm rounded-md hover:opacity-90">
+                            Accept
+                        </button>
+                        <button onclick="declineInvitation('${handle}')" class="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-50">
+                            Decline
+                        </button>
+                    </div>
+                `;
+                break;
+            case 'my-pages':
+                const roleClass = page.role === 'owner' ? 'bg-brand-blue text-white' : 'bg-gray-100 text-gray-600';
+                const roleLabel = page.role === 'owner' ? 'Owner' : 'Editor';
+                actions = `
+                    <span class="text-xs px-2 py-1 rounded-full ${roleClass}">${roleLabel}</span>
+                `;
+                break;
+            case 'following':
+                actions = `
+                    <button onclick="unfollowPage('${handle}')" class="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-50">
+                        Unfollow
+                    </button>
+                `;
+                break;
+        }
+
+        return `
+            <div class="p-4 hover:bg-gray-50">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <a href="/p/${handle}" class="flex items-center gap-3 flex-1 min-w-0">
+                        <img src="${iconUrl}" alt="" class="w-12 h-12 rounded-lg object-cover bg-gray-200 flex-shrink-0">
+                        <div class="min-w-0 flex-1">
+                            <div class="font-medium text-gray-900 truncate">${name}</div>
+                            <div class="text-sm text-gray-500 truncate">${kindLabel}${headline ? ' · ' + headline : ''}</div>
+                        </div>
+                    </a>
+                    <div class="flex items-center">
+                        ${actions}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    async function acceptInvitation(handle) {
+        try {
+            const response = await fetch(`/api/pages/invitations/${encodeURIComponent(handle)}/accept`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                loadData();
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'Failed to accept invitation');
+            }
+        } catch (e) {
+            alert('Failed to accept invitation. Please try again.');
+        }
+    }
+
+    async function declineInvitation(handle) {
+        try {
+            const response = await fetch(`/api/pages/invitations/${encodeURIComponent(handle)}/decline`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                loadData();
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'Failed to decline invitation');
+            }
+        } catch (e) {
+            alert('Failed to decline invitation. Please try again.');
+        }
+    }
+
+    async function unfollowPage(handle) {
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(handle)}/follow`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                loadData();
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'Failed to unfollow page');
+            }
+        } catch (e) {
+            alert('Failed to unfollow page. Please try again.');
+        }
+    }
+
+    async function init() {
+        token = localStorage.getItem('token');
+        const isLoggedIn = isTokenValid(token);
+
+        if (isLoggedIn) {
+            document.getElementById('create-page-btn').classList.remove('hidden');
+            loadData();
+        } else {
+            window.location.href = '/login';
+        }
+    }
+
+    init();
+</script>
+{% endblock %}

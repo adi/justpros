@@ -75,6 +75,13 @@
                     </svg>
                     <span id="people-badge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-brand-pink text-white text-xs rounded-full flex items-center justify-center font-medium"></span>
                 </a>
+                <!-- Pages icon with badge (stacked rectangles) -->
+                <a href="/pages" class="relative text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                    </svg>
+                    <span id="pages-badge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-brand-pink text-white text-xs rounded-full flex items-center justify-center font-medium"></span>
+                </a>
                 <!-- Messages icon with badge -->
                 <a href="/messages" class="relative text-gray-500 hover:text-gray-700">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,10 +140,11 @@
                     document.getElementById('nav-user').classList.remove('hidden');
                     // Fetch user data and badges in parallel
                     try {
-                        const [meResponse, unreadResponse, pendingResponse] = await Promise.all([
+                        const [meResponse, unreadResponse, pendingResponse, pagesResponse] = await Promise.all([
                             fetch('/api/me', { headers: { 'Authorization': `Bearer ${token}` } }),
                             fetch('/api/messages/unread-count', { headers: { 'Authorization': `Bearer ${token}` } }),
-                            fetch('/api/people/pending-received-count', { headers: { 'Authorization': `Bearer ${token}` } })
+                            fetch('/api/people/pending-received-count', { headers: { 'Authorization': `Bearer ${token}` } }),
+                            fetch('/api/pages/invitations/count', { headers: { 'Authorization': `Bearer ${token}` } })
                         ]);
 
                         if (meResponse.ok) {
@@ -168,6 +176,17 @@
                                 const displayCount = pending.count > 9 ? '9+' : pending.count.toString();
                                 peopleBadge.textContent = displayCount;
                                 peopleBadge.classList.remove('hidden');
+                            }
+                        }
+
+                        // Update pages badge (pending editor invitations)
+                        if (pagesResponse.ok) {
+                            const pagesData = await pagesResponse.json();
+                            const pagesBadge = document.getElementById('pages-badge');
+                            if (pagesData.count > 0) {
+                                const displayCount = pagesData.count > 9 ? '9+' : pagesData.count.toString();
+                                pagesBadge.textContent = displayCount;
+                                pagesBadge.classList.remove('hidden');
                             }
                         }
                     } catch (e) {
@@ -238,15 +257,37 @@
                     if (results.length === 0) {
                         searchResults.innerHTML = '<div class="px-4 py-3 text-gray-500 text-sm">No results found</div>';
                     } else {
-                        searchResults.innerHTML = results.map(user => `
-                            <a href="/u/${user.handle}" class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50">
-                                <img src="${user.avatar_url || '/static/default-avatar.svg'}" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200">
-                                <div class="min-w-0 flex-1">
-                                    <div class="font-medium text-gray-900 truncate">${user.name || user.handle}</div>
-                                    ${user.headline ? `<div class="text-sm text-gray-500 truncate">${user.headline}</div>` : ''}
-                                </div>
-                            </a>
-                        `).join('');
+                        const kindLabels = { company: 'Company', event: 'Event', product: 'Product', community: 'Community', virtual: 'Virtual Persona' };
+                        const defaultPageIcons = {
+                            company: '/static/default-page-company.svg',
+                            event: '/static/default-page-event.svg',
+                            product: '/static/default-page-product.svg',
+                            community: '/static/default-page-community.svg',
+                            virtual: '/static/default-page-virtual.svg'
+                        };
+                        searchResults.innerHTML = results.map(item => {
+                            if (item.type === 'page') {
+                                const iconUrl = item.icon_url || defaultPageIcons[item.kind] || defaultPageIcons.virtual;
+                                return `
+                                    <a href="/p/${item.handle}" class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50">
+                                        <img src="${iconUrl}" alt="" class="w-10 h-10 rounded-lg object-cover bg-gray-200">
+                                        <div class="min-w-0 flex-1">
+                                            <div class="font-medium text-gray-900 truncate">${item.name}</div>
+                                            <div class="text-sm text-gray-500 truncate">${kindLabels[item.kind] || 'Page'}${item.headline ? ' · ' + item.headline : ''}</div>
+                                        </div>
+                                    </a>
+                                `;
+                            }
+                            return `
+                                <a href="/u/${item.handle}" class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50">
+                                    <img src="${item.avatar_url || '/static/default-avatar.svg'}" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="font-medium text-gray-900 truncate">${item.name || item.handle}</div>
+                                        ${item.headline ? `<div class="text-sm text-gray-500 truncate">${item.headline}</div>` : ''}
+                                    </div>
+                                </a>
+                            `;
+                        }).join('');
                     }
                     searchResults.classList.remove('hidden');
                 } catch (e) {

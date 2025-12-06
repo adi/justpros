@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}{{ name|default(handle) }} | JustPros{% endblock %}
+{% block og_title %}{{ name|default(handle) }} on JustPros{% endblock %}
+{% block og_description %}{{ headline|default('Page on JustPros') }}{% endblock %}
+{% if og_image %}{% block og_image %}{{ og_image }}{% endblock %}{% endif %}
+
+{% block content %}
+<div class="sm:mt-2 w-full">
+    <div class="bg-white sm:rounded-lg shadow overflow-hidden">
+        <!-- Cover Image -->
+        <div id="cover-image" class="h-48 bg-gradient-to-r from-brand-blue to-brand-pink bg-cover bg-center"></div>
+
+        <!-- Profile Header -->
+        <div class="relative px-6 pb-6">
+            <!-- Icon -->
+            <div class="absolute -top-16 left-6">
+                <img id="page-icon" src="/static/placeholder.svg" alt=""
+                     class="w-32 h-32 rounded-lg object-cover border-4 border-white shadow-lg bg-gray-200">
+            </div>
+
+            <!-- Profile Info -->
+            <div class="pt-20">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="flex-1 min-w-0">
+                        <h1 id="page-name" class="text-2xl font-bold text-gray-900">{{ name|default(handle) }}</h1>
+                        <p id="page-kind" class="text-gray-500 mt-1"></p>
+                        <p id="page-headline" class="text-gray-600 mt-1">{{ headline }}</p>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div id="action-buttons" class="flex gap-2 flex-shrink-0">
+                        <button id="follow-btn" onclick="toggleFollow()" class="hidden px-4 py-2 bg-brand-blue text-white rounded-md text-sm font-medium hover:opacity-90">
+                            Follow
+                        </button>
+                        <a id="manage-btn" href="/p/{{ handle }}/editors" class="hidden px-4 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">
+                            Manage Editors
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div id="page-stats" class="mt-4 text-sm text-gray-500">
+                    <span><strong id="follower-count">0</strong> followers</span>
+                </div>
+
+                <!-- Description (inline) -->
+                <div id="description-section" class="hidden mt-4">
+                    <p id="page-description" class="text-gray-600 whitespace-pre-wrap"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Posts -->
+    <div class="mt-4">
+        <div id="posts-container" class="space-y-4">
+            <div id="posts-loading" class="bg-white sm:rounded-lg shadow p-8 text-center text-gray-500">
+                Loading posts...
+            </div>
+        </div>
+
+        <div id="no-posts" class="hidden bg-white sm:rounded-lg shadow p-8 text-center">
+            <p class="text-gray-500">No posts yet.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    const pageHandle = '{{ handle }}';
+    let pageData = null;
+    let status = null;
+    let isFollowing = false;
+
+    const kindLabels = {
+        company: 'Company',
+        event: 'Event',
+        product: 'Product/Service',
+        community: 'Community',
+        virtual: 'Virtual Persona'
+    };
+
+    const defaultIcons = {
+        company: '/static/default-page-company.svg',
+        event: '/static/default-page-event.svg',
+        product: '/static/default-page-product.svg',
+        community: '/static/default-page-community.svg',
+        virtual: '/static/default-page-virtual.svg'
+    };
+
+    function getDefaultIcon(kind) {
+        return defaultIcons[kind] || defaultIcons.virtual;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    async function loadPageData() {
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}`);
+            if (!response.ok) {
+                document.getElementById('posts-loading').textContent = 'Page not found';
+                return;
+            }
+
+            pageData = await response.json();
+
+            // Update UI
+            document.getElementById('page-name').textContent = pageData.name;
+            document.getElementById('page-kind').textContent = kindLabels[pageData.kind] || 'Page';
+
+            if (pageData.headline) {
+                document.getElementById('page-headline').textContent = pageData.headline;
+            }
+
+            // Set icon - use custom or default based on kind
+            document.getElementById('page-icon').src = pageData.icon_url || getDefaultIcon(pageData.kind);
+
+            if (pageData.cover_url) {
+                document.getElementById('cover-image').style.backgroundImage = `url(${pageData.cover_url})`;
+                document.getElementById('cover-image').style.backgroundSize = 'cover';
+                document.getElementById('cover-image').style.backgroundPosition = 'center';
+            }
+
+            if (pageData.description) {
+                document.getElementById('page-description').textContent = pageData.description;
+                document.getElementById('description-section').classList.remove('hidden');
+            }
+
+            document.getElementById('follower-count').textContent = pageData.follower_count || 0;
+
+            // Load status and posts
+            await Promise.all([loadStatus(), loadPosts()]);
+        } catch (e) {
+            console.error('Failed to load page:', e);
+            document.getElementById('posts-loading').textContent = 'Failed to load page';
+        }
+    }
+
+    async function loadStatus() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            document.getElementById('follow-btn').classList.remove('hidden');
+            document.getElementById('follow-btn').onclick = () => window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/status`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) return;
+
+            status = await response.json();
+            isFollowing = status.is_following;
+
+            // Show appropriate buttons
+            const followBtn = document.getElementById('follow-btn');
+            const manageBtn = document.getElementById('manage-btn');
+
+            if (status.is_editor) {
+                manageBtn.classList.remove('hidden');
+            }
+
+            if (!status.is_owner) {
+                followBtn.classList.remove('hidden');
+                updateFollowButton();
+            }
+        } catch (e) {
+            console.error('Failed to load status:', e);
+        }
+    }
+
+    function updateFollowButton() {
+        const btn = document.getElementById('follow-btn');
+        if (isFollowing) {
+            btn.textContent = 'Following';
+            btn.className = 'px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm';
+        } else {
+            btn.textContent = 'Follow';
+            btn.className = 'px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 text-sm';
+        }
+    }
+
+    async function toggleFollow() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        const btn = document.getElementById('follow-btn');
+        btn.disabled = true;
+
+        try {
+            const method = isFollowing ? 'DELETE' : 'POST';
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/follow`, {
+                method,
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                isFollowing = !isFollowing;
+                updateFollowButton();
+
+                // Update follower count
+                const countEl = document.getElementById('follower-count');
+                const count = parseInt(countEl.textContent) + (isFollowing ? 1 : -1);
+                countEl.textContent = Math.max(0, count);
+            }
+        } catch (e) {
+            console.error('Failed to toggle follow:', e);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function loadPosts() {
+        const token = localStorage.getItem('token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+        try {
+            // TODO: Add page filter to posts endpoint
+            // For now, we'll show a message
+            const container = document.getElementById('posts-container');
+            container.innerHTML = '';
+            document.getElementById('no-posts').classList.remove('hidden');
+        } catch (e) {
+            console.error('Failed to load posts:', e);
+        }
+    }
+
+    async function init() {
+        await loadPageData();
+    }
+
+    init();
+</script>
+{% endblock %}

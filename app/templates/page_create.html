@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Create Page | JustPros{% endblock %}
+
+{% block content %}
+<div class="max-w-xl mx-auto">
+    <div class="bg-white sm:rounded-lg shadow p-6">
+        <h1 class="text-xl font-bold text-gray-900 mb-6">Create a Page</h1>
+
+        <form id="create-page-form" class="space-y-4">
+            <div>
+                <label for="handle" class="block text-sm font-medium text-gray-700 mb-1">Handle</label>
+                <div class="flex items-center">
+                    <span class="text-gray-500 mr-1">@</span>
+                    <input type="text" id="handle" name="handle" required
+                           pattern="[a-z0-9_]+"
+                           class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                           placeholder="mypage">
+                </div>
+                <p id="handle-feedback" class="text-sm mt-1 hidden"></p>
+                <p class="text-xs text-gray-500 mt-1">Lowercase letters, numbers, and underscores only</p>
+            </div>
+
+            <div>
+                <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <input type="text" id="name" name="name" required maxlength="100"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                       placeholder="My Awesome Page">
+            </div>
+
+            <div>
+                <label for="kind" class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select id="kind" name="kind"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                    <option value="company">Company</option>
+                    <option value="event">Event</option>
+                    <option value="product">Product / Service</option>
+                    <option value="community">Community</option>
+                    <option value="virtual">Virtual Persona (bot, AI, character)</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="headline" class="block text-sm font-medium text-gray-700 mb-1">Headline (optional)</label>
+                <input type="text" id="headline" name="headline" maxlength="200"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                       placeholder="A short description of your page">
+            </div>
+
+            <div id="error-message" class="hidden text-red-600 text-sm"></div>
+
+            <div class="flex gap-3 pt-4">
+                <a href="/pages" class="flex-1 px-4 py-2 border border-gray-300 rounded-md text-center hover:bg-gray-50">Cancel</a>
+                <button type="submit" id="submit-btn" class="flex-1 px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90">
+                    Create Page
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    const handleInput = document.getElementById('handle');
+    const handleFeedback = document.getElementById('handle-feedback');
+    let handleCheckTimeout = null;
+
+    handleInput.addEventListener('input', (e) => {
+        const value = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+        e.target.value = value;
+
+        clearTimeout(handleCheckTimeout);
+        handleFeedback.classList.add('hidden');
+
+        if (value.length >= 3) {
+            handleCheckTimeout = setTimeout(() => checkHandle(value), 500);
+        }
+    });
+
+    async function checkHandle(handle) {
+        const token = localStorage.getItem('token');
+        try {
+            // Check if handle exists (as page or user)
+            const [pageRes, userRes] = await Promise.all([
+                fetch(`/api/pages/${encodeURIComponent(handle)}`),
+                fetch(`/api/users/${encodeURIComponent(handle)}`)
+            ]);
+
+            if (pageRes.ok || userRes.ok) {
+                handleFeedback.textContent = 'This handle is taken';
+                handleFeedback.className = 'text-sm mt-1 text-red-600';
+            } else {
+                handleFeedback.textContent = 'Available';
+                handleFeedback.className = 'text-sm mt-1 text-green-600';
+            }
+            handleFeedback.classList.remove('hidden');
+        } catch (e) {
+            console.error('Handle check failed:', e);
+        }
+    }
+
+    document.getElementById('create-page-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        const submitBtn = document.getElementById('submit-btn');
+        const errorEl = document.getElementById('error-message');
+        errorEl.classList.add('hidden');
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Creating...';
+
+        try {
+            const response = await fetch('/api/pages', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    handle: handleInput.value,
+                    name: document.getElementById('name').value,
+                    kind: document.getElementById('kind').value,
+                    headline: document.getElementById('headline').value || null
+                })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.detail || 'Failed to create page');
+            }
+
+            const page = await response.json();
+            window.location.href = `/p/${page.handle}`;
+        } catch (e) {
+            errorEl.textContent = e.message;
+            errorEl.classList.remove('hidden');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Create Page';
+        }
+    });
+
+    // Require login
+    async function init() {
+        const isLoggedIn = await checkAuth();
+        if (!isLoggedIn) {
+            window.location.href = '/login';
+        }
+    }
+
+    init();
+</script>
+{% endblock %}

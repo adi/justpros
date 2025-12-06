@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Editors | JustPros{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <!-- Header -->
+    <div class="bg-white sm:rounded-lg shadow mb-4 p-4">
+        <div class="flex items-center gap-3">
+            <a href="/p/{{ handle }}" class="text-gray-500 hover:text-gray-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </a>
+            <h1 class="text-xl font-bold text-gray-900">Manage Editors</h1>
+        </div>
+        <p id="page-name" class="text-gray-500 mt-1 ml-8"></p>
+    </div>
+
+    <!-- Invite Editor (Owner only) -->
+    <div id="invite-section" class="hidden bg-white sm:rounded-lg shadow mb-4 p-4">
+        <h2 class="font-medium text-gray-900 mb-3">Invite Editor</h2>
+        <div class="flex gap-2">
+            <input type="text" id="invite-handle" placeholder="Enter user handle"
+                   class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue text-sm">
+            <button onclick="inviteEditor()" id="invite-btn" class="px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 text-sm">
+                Invite
+            </button>
+        </div>
+        <p id="invite-error" class="hidden text-red-600 text-sm mt-2"></p>
+        <p id="invite-success" class="hidden text-green-600 text-sm mt-2"></p>
+    </div>
+
+    <!-- Owner -->
+    <div class="bg-white sm:rounded-lg shadow mb-4 p-4">
+        <h2 class="font-medium text-gray-900 mb-3">Owner</h2>
+        <div id="owner-container"></div>
+    </div>
+
+    <!-- Editors -->
+    <div class="bg-white sm:rounded-lg shadow mb-4 p-4">
+        <h2 class="font-medium text-gray-900 mb-3">Editors</h2>
+        <div id="editors-container">
+            <p class="text-gray-500 text-sm">No editors yet.</p>
+        </div>
+    </div>
+
+    <!-- Pending Invitations (Owner only) -->
+    <div id="pending-section" class="hidden bg-white sm:rounded-lg shadow mb-4 p-4">
+        <h2 class="font-medium text-gray-900 mb-3">Pending Invitations</h2>
+        <div id="pending-container">
+            <p class="text-gray-500 text-sm">No pending invitations.</p>
+        </div>
+    </div>
+
+    <!-- Transfer Ownership (Owner only) -->
+    <div id="transfer-section" class="hidden bg-white sm:rounded-lg shadow mb-4 p-4">
+        <h2 class="font-medium text-gray-900 mb-3">Transfer Ownership</h2>
+        <p class="text-gray-500 text-sm mb-3">Transfer page ownership to an existing editor. You will become an editor.</p>
+        <select id="transfer-select" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue text-sm mb-2">
+            <option value="">Select an editor...</option>
+        </select>
+        <button onclick="transferOwnership()" id="transfer-btn" class="px-4 py-2 bg-red-600 text-white rounded-md hover:opacity-90 text-sm">
+            Transfer Ownership
+        </button>
+        <p id="transfer-error" class="hidden text-red-600 text-sm mt-2"></p>
+    </div>
+
+    <!-- Leave Page -->
+    <div id="leave-section" class="hidden bg-white sm:rounded-lg shadow p-4">
+        <h2 class="font-medium text-gray-900 mb-3">Leave Page</h2>
+        <p class="text-gray-500 text-sm mb-3">Remove yourself as an editor from this page.</p>
+        <button onclick="leavePage()" id="leave-btn" class="px-4 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50 text-sm">
+            Leave Page
+        </button>
+    </div>
+</div>
+
+<script>
+    const pageHandle = '{{ handle }}';
+    let editorsData = null;
+    let currentUserHandle = null;
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function renderPerson(person, actions = '') {
+        return `
+            <div class="flex items-center gap-3 py-2">
+                <a href="/u/${person.handle}">
+                    <img src="${person.avatar_url || '/static/default-avatar.svg'}" alt=""
+                         class="w-10 h-10 rounded-full object-cover bg-gray-200">
+                </a>
+                <div class="flex-1 min-w-0">
+                    <a href="/u/${person.handle}" class="font-medium text-gray-900 hover:underline">${escapeHtml(person.name)}</a>
+                    <p class="text-sm text-gray-500">@${person.handle}</p>
+                </div>
+                ${actions}
+            </div>
+        `;
+    }
+
+    async function loadEditors() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/editors`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                if (response.status === 403) {
+                    window.location.href = `/p/${pageHandle}`;
+                }
+                return;
+            }
+
+            editorsData = await response.json();
+
+            // Update page name
+            const pageRes = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}`);
+            if (pageRes.ok) {
+                const page = await pageRes.json();
+                document.getElementById('page-name').textContent = page.name;
+            }
+
+            // Render owner
+            document.getElementById('owner-container').innerHTML = renderPerson(editorsData.owner,
+                editorsData.is_owner ? '<span class="text-xs px-2 py-1 bg-brand-blue text-white rounded-full">You</span>' : ''
+            );
+
+            // Render editors
+            const editorsContainer = document.getElementById('editors-container');
+            if (editorsData.editors.length === 0) {
+                editorsContainer.innerHTML = '<p class="text-gray-500 text-sm">No editors yet.</p>';
+            } else {
+                editorsContainer.innerHTML = editorsData.editors.map(e => {
+                    const isMe = e.handle === currentUserHandle;
+                    let actions = '';
+                    if (editorsData.is_owner) {
+                        actions = `<button onclick="removeEditor('${e.handle}')" class="text-red-600 text-sm hover:underline">Remove</button>`;
+                    } else if (isMe) {
+                        actions = '<span class="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">You</span>';
+                    }
+                    return renderPerson(e, actions);
+                }).join('');
+            }
+
+            // Owner-only sections
+            if (editorsData.is_owner) {
+                document.getElementById('invite-section').classList.remove('hidden');
+                document.getElementById('pending-section').classList.remove('hidden');
+
+                // Render pending
+                const pendingContainer = document.getElementById('pending-container');
+                if (editorsData.pending.length === 0) {
+                    pendingContainer.innerHTML = '<p class="text-gray-500 text-sm">No pending invitations.</p>';
+                } else {
+                    pendingContainer.innerHTML = editorsData.pending.map(p =>
+                        renderPerson(p, `<button onclick="removeEditor('${p.handle}')" class="text-red-600 text-sm hover:underline">Cancel</button>`)
+                    ).join('');
+                }
+
+                // Transfer ownership section
+                if (editorsData.editors.length > 0) {
+                    document.getElementById('transfer-section').classList.remove('hidden');
+                    const select = document.getElementById('transfer-select');
+                    select.innerHTML = '<option value="">Select an editor...</option>' +
+                        editorsData.editors.map(e => `<option value="${e.handle}">${escapeHtml(e.name)} (@${e.handle})</option>`).join('');
+                }
+            } else {
+                // Show leave button for non-owners
+                document.getElementById('leave-section').classList.remove('hidden');
+            }
+        } catch (e) {
+            console.error('Failed to load editors:', e);
+        }
+    }
+
+    async function inviteEditor() {
+        const token = localStorage.getItem('token');
+        const handle = document.getElementById('invite-handle').value.trim().toLowerCase();
+        const errorEl = document.getElementById('invite-error');
+        const successEl = document.getElementById('invite-success');
+        const btn = document.getElementById('invite-btn');
+
+        errorEl.classList.add('hidden');
+        successEl.classList.add('hidden');
+
+        if (!handle) {
+            errorEl.textContent = 'Please enter a handle';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Inviting...';
+
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/editors/${encodeURIComponent(handle)}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.detail || 'Failed to invite editor');
+            }
+
+            successEl.textContent = `Invitation sent to @${handle}`;
+            successEl.classList.remove('hidden');
+            document.getElementById('invite-handle').value = '';
+            await loadEditors();
+        } catch (e) {
+            errorEl.textContent = e.message;
+            errorEl.classList.remove('hidden');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Invite';
+        }
+    }
+
+    async function removeEditor(handle) {
+        if (!confirm(`Remove @${handle} as editor?`)) return;
+
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/editors/${encodeURIComponent(handle)}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                await loadEditors();
+            }
+        } catch (e) {
+            console.error('Failed to remove editor:', e);
+        }
+    }
+
+    async function transferOwnership() {
+        const handle = document.getElementById('transfer-select').value;
+        const errorEl = document.getElementById('transfer-error');
+        errorEl.classList.add('hidden');
+
+        if (!handle) {
+            errorEl.textContent = 'Please select an editor';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        if (!confirm(`Transfer ownership to @${handle}? You will become an editor.`)) return;
+
+        const token = localStorage.getItem('token');
+        const btn = document.getElementById('transfer-btn');
+        btn.disabled = true;
+
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/transfer/${encodeURIComponent(handle)}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.detail || 'Failed to transfer ownership');
+            }
+
+            window.location.reload();
+        } catch (e) {
+            errorEl.textContent = e.message;
+            errorEl.classList.remove('hidden');
+            btn.disabled = false;
+        }
+    }
+
+    async function leavePage() {
+        if (!confirm('Are you sure you want to leave this page?')) return;
+
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/editors/${encodeURIComponent(currentUserHandle)}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                window.location.href = '/pages';
+            }
+        } catch (e) {
+            console.error('Failed to leave page:', e);
+        }
+    }
+
+    async function init() {
+        const isLoggedIn = await checkAuth();
+        if (!isLoggedIn) {
+            window.location.href = '/login';
+            return;
+        }
+
+        // Get current user handle
+        const token = localStorage.getItem('token');
+        const meRes = await fetch('/api/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (meRes.ok) {
+            const me = await meRes.json();
+            currentUserHandle = me.handle;
+        }
+
+        await loadEditors();
+    }
+
+    init();
+</script>
+{% endblock %}

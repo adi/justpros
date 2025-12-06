@@ -402,11 +402,13 @@ async def update_notification_settings(
 
 @router.get("/search")
 async def search_users(q: str) -> list[dict]:
-    """Search users by name, handle, headline, or skills."""
+    """Search users and pages by name, handle, or headline."""
     if len(q) < 2:
         return []
 
     q_lower = q.lower()
+
+    # Search users
     users = await database.fetch_all(
         """
         SELECT handle, first_name, middle_name, last_name, headline, avatar_path
@@ -419,12 +421,27 @@ async def search_users(q: str) -> list[dict]:
             OR headline ILIKE '%' || :q || '%'
             OR :q_lower = ANY(SELECT LOWER(unnest(skills)))
           )
-        LIMIT 10
+        LIMIT 8
         """,
         {"q": q, "q_lower": q_lower},
     )
 
+    # Search pages
+    pages = await database.fetch_all(
+        """
+        SELECT handle, name, kind, headline, icon_path
+        FROM pages
+        WHERE handle ILIKE '%' || :q || '%'
+           OR name ILIKE '%' || :q || '%'
+           OR headline ILIKE '%' || :q || '%'
+        LIMIT 5
+        """,
+        {"q": q},
+    )
+
     results = []
+
+    # Add user results
     for user in users:
         first_name = user["first_name"] or ""
         middle_name = user["middle_name"]
@@ -436,10 +453,23 @@ async def search_users(q: str) -> list[dict]:
         )
         avatar_path = user["avatar_path"]
         results.append({
+            "type": "user",
             "handle": user["handle"],
             "name": full_name,
             "headline": user["headline"],
             "avatar_url": get_avatar_url(avatar_path) if avatar_path else None,
+        })
+
+    # Add page results
+    for page in pages:
+        icon_path = page["icon_path"]
+        results.append({
+            "type": "page",
+            "handle": page["handle"],
+            "name": page["name"],
+            "kind": page["kind"],
+            "headline": page["headline"],
+            "icon_url": get_avatar_url(icon_path) if icon_path else None,
         })
 
     return results

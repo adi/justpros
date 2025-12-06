@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator
 from app.auth import get_current_user, get_optional_user
 from app.db import database
 from app.routers.messages import notify_user
+from app.routers.page_api import is_page_editor
 from app.storage import (
     POST_MEDIA_EXTENSION_MAP,
     delete_post_media,
@@ -27,6 +28,7 @@ MENTION_PATTERN = re.compile(r"@([a-z0-9_]{3,30})\b")
 class PostCreate(BaseModel):
     content: str
     visibility: str = "connections"
+    page_id: int | None = None  # If posting as a Page
 
     @field_validator("content")
     @classmethod
@@ -153,6 +155,44 @@ async def get_connected_user_ids(user_id: int) -> list[int]:
         {"user_id": user_id},
     )
     return [row["other_user_id"] for row in rows]
+
+
+async def get_followed_page_ids(user_id: int) -> list[int]:
+    """Get IDs of all pages the user follows."""
+    rows = await database.fetch_all(
+        """SELECT page_id FROM page_follows WHERE user_id = :user_id""",
+        {"user_id": user_id},
+    )
+    return [row["page_id"] for row in rows]
+
+
+async def get_pages_info(page_ids: list[int]) -> dict[int, dict]:
+    """Get page info for multiple pages at once."""
+    if not page_ids:
+        return {}
+
+    placeholders = ", ".join(f":p{i}" for i in range(len(page_ids)))
+    params = {f"p{i}": pid for i, pid in enumerate(page_ids)}
+
+    rows = await database.fetch_all(
+        f"""
+        SELECT id, handle, name, kind, icon_path
+        FROM pages
+        WHERE id IN ({placeholders})
+        """,
+        params,
+    )
+
+    return {
+        row["id"]: {
+            "id": row["id"],
+            "handle": row["handle"],
+            "name": row["name"],
+            "kind": row["kind"],
+            "icon_url": get_avatar_url(row["icon_path"]) if row["icon_path"] else None,
+        }
+        for row in rows
+    }
 
 
 async def can_view_post(user_id: int | None, post: dict) -> bool:
@@ -301,13 +341,13 @@ async def get_posts_media(post_ids: list[int]) -> dict[int, list[dict]]:
 
 
 def format_post_response(
-    post: dict, user_id: int | None, user_vote: int | None = None, media: list[dict] | None = None
+    post: dict, user_id: int | None, user_vote: int | None = None, media: list[dict] | None = None, page_info: dict | None = None
 ) -> dict:
     """Format a post for API response."""
     vote_sum = post["vote_sum"]
     vote_count = post["vote_count"]
     average = vote_sum / vote_count if vote_count > 0 else 0
-    return {
+    result = {
         "id": post["id"],
         "author": _format_author(dict(post)),
         "content": post["content"],
@@ -323,7 +363,10 @@ def format_post_response(
         "is_mine": user_id is not None and post["author_id"] == user_id,
         "created_at": post["created_at"].isoformat() if post["created_at"] else None,
         "media": media or [],
+        "page_id": post.get("page_id"),
+        "page": page_info,
     }
+    return result
 
 
 # --- Endpoints ---
@@ -340,7 +383,7 @@ async def list_posts(
     List feed posts (top-level posts only).
 
     Filters:
-    - all: Public + own + connections' posts (default)
+    - all: Public + own + connections' + followed pages' posts (default)
     - mine: Only own posts
     """
     if limit > 50:
@@ -363,7 +406,7 @@ async def list_posts(
         """
         params["user_id"] = user_id
     elif user_id is None:
-        # Not logged in: public posts only
+        # Not logged in: public posts only (including page posts)
         base_query = """
             SELECT p.*, u.handle, u.first_name, u.middle_name, u.last_name, u.headline, u.avatar_path
             FROM posts p
@@ -372,33 +415,31 @@ async def list_posts(
               AND p.visibility = 'public'
         """
     else:
-        # Logged in: public + own + connections
+        # Logged in: public + own + connections + followed pages
         connected_ids = await get_connected_user_ids(user_id)
+        followed_page_ids = await get_followed_page_ids(user_id)
+
+        conditions = ["p.visibility = 'public'", "p.author_id = :user_id"]
 
         if connected_ids:
-            placeholders = ", ".join(f":c{i}" for i in range(len(connected_ids)))
+            conn_placeholders = ", ".join(f":c{i}" for i in range(len(connected_ids)))
             for i, cid in enumerate(connected_ids):
                 params[f"c{i}"] = cid
+            conditions.append(f"(p.visibility = 'connections' AND p.page_id IS NULL AND p.author_id IN ({conn_placeholders}))")
 
-            base_query = f"""
-                SELECT p.*, u.handle, u.first_name, u.middle_name, u.last_name, u.headline, u.avatar_path
-                FROM posts p
-                JOIN users u ON u.id = p.author_id
-                WHERE p.reply_to_id IS NULL
-                  AND (
-                      p.visibility = 'public'
-                      OR p.author_id = :user_id
-                      OR (p.visibility = 'connections' AND p.author_id IN ({placeholders}))
-                  )
-            """
-        else:
-            base_query = """
-                SELECT p.*, u.handle, u.first_name, u.middle_name, u.last_name, u.headline, u.avatar_path
-                FROM posts p
-                JOIN users u ON u.id = p.author_id
-                WHERE p.reply_to_id IS NULL
-                  AND (p.visibility = 'public' OR p.author_id = :user_id)
-            """
+        if followed_page_ids:
+            page_placeholders = ", ".join(f":pg{i}" for i in range(len(followed_page_ids)))
+            for i, pid in enumerate(followed_page_ids):
+                params[f"pg{i}"] = pid
+            conditions.append(f"(p.page_id IN ({page_placeholders}))")
+
+        base_query = f"""
+            SELECT p.*, u.handle, u.first_name, u.middle_name, u.last_name, u.headline, u.avatar_path
+            FROM posts p
+            JOIN users u ON u.id = p.author_id
+            WHERE p.reply_to_id IS NULL
+              AND ({' OR '.join(conditions)})
+        """
         params["user_id"] = user_id
 
     # Add pagination
@@ -410,14 +451,20 @@ async def list_posts(
 
     posts = await database.fetch_all(base_query, params)
 
-    # Get user votes and media for these posts
+    # Get user votes, media, and page info for these posts
     user_votes: dict[int, int] = {}
     posts_media: dict[int, list[dict]] = {}
+    pages_info: dict[int, dict] = {}
     if posts:
         post_ids = [p["id"] for p in posts]
+        page_ids = list(set(p["page_id"] for p in posts if p["page_id"]))
 
         # Get media for all posts
         posts_media = await get_posts_media(post_ids)
+
+        # Get page info for page posts
+        if page_ids:
+            pages_info = await get_pages_info(page_ids)
 
         # Get user votes if logged in
         if user_id:
@@ -437,7 +484,11 @@ async def list_posts(
     return {
         "posts": [
             format_post_response(
-                dict(p), user_id, user_votes.get(p["id"]), posts_media.get(p["id"], [])
+                dict(p),
+                user_id,
+                user_votes.get(p["id"]),
+                posts_media.get(p["id"], []),
+                pages_info.get(p["page_id"]) if p["page_id"] else None,
             )
             for p in posts
         ],
@@ -521,16 +572,25 @@ async def create_post(
     """Create a new top-level post."""
     user_id = current_user["id"]
 
+    # If posting as a Page, verify user is owner/editor
+    if payload.page_id:
+        if not await is_page_editor(payload.page_id, user_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to post as this Page",
+            )
+
     result = await database.fetch_one(
         """
-        INSERT INTO posts (author_id, content, visibility)
-        VALUES (:author_id, :content, :visibility)
+        INSERT INTO posts (author_id, content, visibility, page_id)
+        VALUES (:author_id, :content, :visibility, :page_id)
         RETURNING id, created_at
         """,
         {
             "author_id": user_id,
             "content": payload.content,
             "visibility": payload.visibility,
+            "page_id": payload.page_id,
         },
     )
 
