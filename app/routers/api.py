@@ -401,7 +401,10 @@ async def update_notification_settings(
 
 
 @router.get("/search")
-async def search_users(q: str) -> list[dict]:
+async def search_users(
+    q: str,
+    current_user: dict = Depends(get_current_user),
+) -> list[dict]:
     """Search users and pages by name, handle, or headline."""
     if len(q) < 2:
         return []
