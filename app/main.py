@@ -17,32 +17,18 @@ templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 async def auto_ignore_old_connection_requests():
     """Background task to auto-ignore connection requests older than 30 days.
 
-    Sets receiver_deleted timestamp on requests that have been pending for 30+ days.
-    This effectively 'ignores' them without any explicit action from the receiver.
+    Updates pending connection requests to 'ignored' status after 30 days.
     """
     while True:
         await asyncio.sleep(3600)  # Run every hour
         try:
-            # Find pending requests older than 30 days and soft-delete for receiver
-            # A request is pending if:
-            # 1. It's a 'connection_request' kind message
-            # 2. There's no 'confirm' message from receiver to sender after it
-            # 3. receiver_deleted is NULL
-            # 4. It's older than 30 days
+            # Update pending requests older than 30 days to 'ignored'
             await database.execute(
                 """
-                UPDATE messages m
-                SET receiver_deleted = NOW()
-                WHERE m.kind = 'connection_request'
-                  AND m.receiver_deleted IS NULL
-                  AND m.created_at < NOW() - INTERVAL '30 days'
-                  AND NOT EXISTS (
-                      SELECT 1 FROM messages m2
-                      WHERE m2.kind = 'confirm'
-                        AND m2.sender_id = m.receiver_id
-                        AND m2.receiver_id = m.sender_id
-                        AND m2.created_at > m.created_at
-                  )
+                UPDATE connections
+                SET status = 'ignored', responded_at = NOW()
+                WHERE status = 'pending'
+                  AND requested_at < NOW() - INTERVAL '30 days'
                 """
             )
         except Exception as e:
