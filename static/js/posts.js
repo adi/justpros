@@ -177,6 +177,19 @@ function renderGaugeIcon(level, size = 24) {
     `;
 }
 
+function renderUserVoteBadge(userVote, size = 'normal') {
+    if (userVote === null || userVote === undefined) return '';
+    const color = SCALE_COLORS[userVote.toString()];
+    const label = userVote > 0 ? `+${userVote}` : userVote.toString();
+    const sizeClasses = size === 'small' ? 'w-4 h-4 text-[9px]' : 'w-5 h-5 text-[10px]';
+    return `
+        <span class="${sizeClasses} rounded-full flex items-center justify-center text-white font-bold shadow-sm ml-1"
+              style="background-color: ${color}">
+            ${label}
+        </span>
+    `;
+}
+
 // Keep old name as alias for compatibility
 function renderScaleIcon(level, size = 24) {
     return renderGaugeIcon(level, size);
@@ -364,7 +377,7 @@ function renderPost(post, options = {}) {
                 <div class="flex items-center gap-4 mt-3 text-sm">
                     <div class="relative" id="vote-container-${post.id}">
                         <button class="flex items-center gap-1.5 ${voteButtonClass}" ${canVote ? `onclick="toggleVotePicker(${post.id}, event)"` : ''}>
-                            <span id="scale-icon-${post.id}" class="${post.user_vote !== null ? 'ring-2 ring-brand-blue ring-offset-1 rounded-full' : ''}">${renderScaleIcon(post.display_level || 0, 24)}</span>
+                            <span id="scale-icon-${post.id}" class="flex items-center">${renderScaleIcon(post.display_level || 0, 24)}<span id="vote-badge-${post.id}">${renderUserVoteBadge(post.user_vote)}</span></span>
                             <span id="vote-count-${post.id}" class="text-gray-500">${post.vote_count || 0}</span>
                         </button>
                         <div id="vote-picker-${post.id}" class="hidden"></div>

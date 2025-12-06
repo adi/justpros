@@ -217,7 +217,7 @@
                         <div class="flex items-center gap-3 mt-2 text-xs">
                             <div class="relative" id="vote-container-${comment.id}">
                                 <button class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="toggleVotePicker(${comment.id}, event)"` : ''}>
-                                    <span id="scale-icon-${comment.id}" class="${comment.user_vote !== null ? 'ring-2 ring-brand-blue ring-offset-1 rounded-full' : ''}">${renderScaleIcon(comment.display_level || 0, 20)}</span>
+                                    <span id="scale-icon-${comment.id}" class="flex items-center">${renderScaleIcon(comment.display_level || 0, 20)}<span id="vote-badge-${comment.id}">${renderUserVoteBadge(comment.user_vote, 'small')}</span></span>
                                     <span id="vote-count-${comment.id}" class="text-gray-500">${comment.vote_count}</span>
                                 </button>
                                 <div id="vote-picker-${comment.id}" class="hidden"></div>
@@ -323,15 +323,19 @@
     function updateScaleDisplay(postId, data) {
         currentUserVotes[postId] = data.user_vote;
 
-        // Update scale icon and ring indicator
+        // Update scale icon
         const iconEl = document.getElementById(`scale-icon-${postId}`);
         if (iconEl) {
-            iconEl.innerHTML = renderScaleIcon(data.display_level, 24);
-            if (data.user_vote !== null) {
-                iconEl.className = 'ring-2 ring-brand-blue ring-offset-1 rounded-full';
-            } else {
-                iconEl.className = '';
+            const svg = iconEl.querySelector('svg');
+            if (svg) {
+                svg.outerHTML = renderScaleIcon(data.display_level, 24);
             }
+        }
+
+        // Update vote badge
+        const badgeEl = document.getElementById(`vote-badge-${postId}`);
+        if (badgeEl) {
+            badgeEl.innerHTML = renderUserVoteBadge(data.user_vote);
         }
 
         // Update vote count (always show)
