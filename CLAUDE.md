@@ -166,6 +166,47 @@ async def update_my_profile(
     ...
 ```
 
+### 6.2 Git Commits
+
+Commit messages follow a consistent, concise style:
+
+- **Lowercase**: Start with a lowercase verb
+- **Imperative mood**: Use "add", "fix", "improve", not "added", "fixes", "improved"
+- **Short**: Keep under ~50 characters
+- **No period**: Don't end with punctuation
+- **Action-focused**: Describe what the commit does, not why
+
+**Common patterns:**
+
+| Prefix | Usage | Examples |
+|--------|-------|----------|
+| `add` | New features or content | `add avatar upload`, `add video support`, `add connections` |
+| `fix` | Bug fixes | `fix auth issue`, `fix voting and make top bar sticky` |
+| `improve` | Enhancements to existing features | `improve esthetics`, `improve profile cover location on mobile` |
+| `refactor` | Code restructuring | `refactor posts for code reuse` |
+| `remove` | Deletions | `remove unnecessary video controls`, `remove download button` |
+| `change` | Modifications | `change vote system`, `change comments UI` |
+| `simplify` | Making things simpler | `simplify autoignore old connection requests` |
+| `enable` | Turning on features | `enable edit page` |
+| `update` | Updates to docs or configs | `update CLAUDE.md` |
+
+**Examples from history:**
+
+```
+add page editors management
+remove disclosure of the author of a page post
+fix usability of profile on mobile
+improve experience of starting post as a page
+simplify message
+convert emoticons to emojis in posts
+```
+
+**Avoid:**
+- Past tense: ~~"added feature"~~, ~~"fixed bug"~~
+- Capitalized: ~~"Add feature"~~
+- Verbose: ~~"This commit adds the ability to..."~~
+- Vague: ~~"update code"~~, ~~"misc changes"~~
+
 ---
 
 ## 7. Current State
