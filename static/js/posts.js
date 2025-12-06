@@ -1,0 +1,386 @@
+// Shared post rendering utilities
+
+const defaultPageIcons = {
+    company: '/static/default-page-company.svg',
+    event: '/static/default-page-event.svg',
+    product: '/static/default-page-product.svg',
+    community: '/static/default-page-community.svg',
+    virtual: '/static/default-page-virtual.svg'
+};
+
+function getDefaultPageIcon(kind) {
+    return defaultPageIcons[kind] || defaultPageIcons.virtual;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatTime(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'now';
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    if (diffDays < 7) return `${diffDays}d`;
+
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Text emoticon to emoji conversion
+const TEXT_EMOJIS = {
+    ':)': '😊', ':-)': '😊', ':]': '😊',
+    ':D': '😄', ':-D': '😄',
+    ';)': '😉', ';-)': '😉',
+    ':P': '😛', ':-P': '😛', ':p': '😛', ':-p': '😛',
+    ':(': '😞', ':-(': '😞', ':[': '😞',
+    ":'(": '😢', ":'-(": '😢',
+    ':O': '😮', ':-O': '😮', ':o': '😮', ':-o': '😮',
+    'XD': '😆', 'xD': '😆',
+    '<3': '❤️',
+    ':*': '😘', ':-*': '😘',
+    'B)': '😎', 'B-)': '😎',
+    ':/': '😕', ':-/': '😕',
+    ':S': '😖', ':-S': '😖', ':s': '😖', ':-s': '😖',
+    '>:(': '😠', '>:-(': '😠',
+    'O:)': '😇', 'O:-)': '😇',
+    '>:)': '😈', '>:-)': '😈',
+    ':|': '😐', ':-|': '😐',
+    '^_^': '😊', '^-^': '😊',
+    '-_-': '😑',
+    'T_T': '😭', 'T-T': '😭',
+    ':3': '😺',
+};
+
+function convertTextEmojis(text) {
+    // Sort by length (longest first) to match longer patterns before shorter ones
+    const sorted = Object.keys(TEXT_EMOJIS).sort((a, b) => b.length - a.length);
+    for (const emoticon of sorted) {
+        text = text.split(emoticon).join(TEXT_EMOJIS[emoticon]);
+    }
+    return text;
+}
+
+function formatPostContent(content) {
+    if (!content) return '';
+    // Escape HTML first
+    let escaped = escapeHtml(content);
+    // Extract URLs before emoticon conversion to protect them
+    const urlRegex = /(https?:\/\/[^\s<]+[^\s<.,;:!?\]\)"'])/gi;
+    const urls = [];
+    escaped = escaped.replace(urlRegex, (match) => {
+        urls.push(match);
+        return `\x00URL${urls.length - 1}\x00`;
+    });
+    // Convert text emoticons to emojis (URLs are now protected)
+    escaped = convertTextEmojis(escaped);
+    // Restore URLs as clickable links (nofollow to prevent reputation transfer)
+    escaped = escaped.replace(/\x00URL(\d+)\x00/g, (_, idx) => {
+        const url = urls[parseInt(idx)];
+        return `<a href="${url}" target="_blank" rel="nofollow noopener noreferrer" class="text-brand-blue hover:underline" onclick="event.stopPropagation()">${url}</a>`;
+    });
+    // Convert @mentions to links
+    escaped = escaped.replace(/@([a-z0-9_]{3,30})\b/g, '<a href="/u/$1" class="text-brand-blue hover:underline" onclick="event.stopPropagation()">@$1</a>');
+    return escaped;
+}
+
+function renderPostMedia(media) {
+    if (!media || media.length === 0) return '';
+    const m = media[0];
+    if (m.type === 'video') {
+        return `<div class="mt-3 -mx-4 bg-black flex justify-center"><video src="${m.url}" controls controlsList="nodownload noplaybackrate" disablePictureInPicture class="max-w-full max-h-[80vh] object-contain" preload="metadata"></video></div>`;
+    }
+    return `<div class="mt-3 -mx-4 bg-black flex justify-center"><img src="${m.url}" alt="" class="max-w-full max-h-[80vh] object-contain cursor-pointer" onclick="openImageModal('${m.url}', event)"></div>`;
+}
+
+function openImageModal(url, event) {
+    event.stopPropagation();
+    const overlay = document.createElement('div');
+    overlay.id = 'image-modal';
+    overlay.className = 'fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[100] cursor-pointer';
+    overlay.onclick = () => overlay.remove();
+    overlay.innerHTML = `<img src="${url}" alt="" class="max-w-full max-h-full object-contain">`;
+    document.body.appendChild(overlay);
+}
+
+// Close image modal on escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('image-modal');
+        if (modal) modal.remove();
+    }
+});
+
+// --- Scale Voting System ---
+
+const SCALE_COLORS = {
+    '-3': '#dc2626', '-2': '#ef4444', '-1': '#f87171',
+    '0': '#9ca3af',
+    '1': '#4ade80', '2': '#22c55e', '3': '#16a34a'
+};
+
+function getScaleColor(level) {
+    const clamped = Math.round(Math.max(-3, Math.min(3, level)));
+    return SCALE_COLORS[clamped.toString()];
+}
+
+function renderScaleIcon(level, size = 24) {
+    const displayLevel = Math.round(Math.max(-3, Math.min(3, level)));
+    const color = getScaleColor(displayLevel);
+    const tiltAngle = displayLevel * 8;
+    const tiltRad = tiltAngle * Math.PI / 180;
+    const beamHalf = 8;
+    const leftX = 12 - beamHalf * Math.cos(tiltRad);
+    const leftY = 6 - beamHalf * Math.sin(tiltRad);
+    const rightX = 12 + beamHalf * Math.cos(tiltRad);
+    const rightY = 6 + beamHalf * Math.sin(tiltRad);
+    const chainLen = 4;
+    const leftPanY = leftY + chainLen;
+    const rightPanY = rightY + chainLen;
+    return `
+        <svg width="${size}" height="${size}" viewBox="0 0 24 24">
+            <rect x="8" y="20" width="8" height="2" rx="1" fill="${color}"/>
+            <rect x="11" y="6" width="2" height="14" fill="${color}"/>
+            <circle cx="12" cy="6" r="2" fill="${color}"/>
+            <line x1="${leftX.toFixed(1)}" y1="${leftY.toFixed(1)}"
+                  x2="${rightX.toFixed(1)}" y2="${rightY.toFixed(1)}"
+                  stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+            <line x1="${leftX.toFixed(1)}" y1="${leftY.toFixed(1)}"
+                  x2="${leftX.toFixed(1)}" y2="${leftPanY.toFixed(1)}"
+                  stroke="${color}" stroke-width="1"/>
+            <line x1="${rightX.toFixed(1)}" y1="${rightY.toFixed(1)}"
+                  x2="${rightX.toFixed(1)}" y2="${rightPanY.toFixed(1)}"
+                  stroke="${color}" stroke-width="1"/>
+            <ellipse cx="${leftX.toFixed(1)}" cy="${(leftPanY + 1).toFixed(1)}" rx="3" ry="1.5" fill="${color}"/>
+            <ellipse cx="${rightX.toFixed(1)}" cy="${(rightPanY + 1).toFixed(1)}" rx="3" ry="1.5" fill="${color}"/>
+        </svg>
+    `;
+}
+
+function renderVotePicker(postId, userVote) {
+    const levels = [-3, -2, -1, 0, 1, 2, 3];
+    const buttons = levels.map(v => {
+        const isSelected = userVote === v;
+        const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-1' : '';
+        const label = v > 0 ? `+${v}` : v.toString();
+        return `
+            <button onclick="submitVote(${postId}, ${v}, event)"
+                    class="w-7 h-7 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center"
+                    title="${label}">
+                ${renderScaleIcon(v, 22)}
+            </button>
+        `;
+    }).join('');
+
+    return `
+        <div class="vote-picker absolute left-0 mt-2 bg-white shadow-lg rounded-xl p-3 z-50 border border-gray-200"
+             onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between gap-1">
+                ${buttons}
+            </div>
+            <div class="text-center text-xs text-gray-400 mt-2">
+                Click to vote • Click again to remove
+            </div>
+        </div>
+    `;
+}
+
+// --- Post Rendering ---
+
+function renderVisibilityIcon(visibility) {
+    if (visibility === 'public') {
+        return `<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Public">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+           </svg>`;
+    }
+    return `<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Connections only">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+       </svg>`;
+}
+
+function renderPostMenu(post, token) {
+    const menuItems = [];
+    menuItems.push(`<button onclick="sharePost(${post.id}); closePostMenu(${post.id})" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Share</button>`);
+    if (token && !post.is_mine) {
+        menuItems.push(`<button onclick="reportAbuse(${post.id}); closePostMenu(${post.id})" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Report Abuse</button>`);
+    }
+    if (post.is_mine) {
+        menuItems.push(`<button onclick="showDeleteModal(${post.id}); closePostMenu(${post.id})" class="w-full text-left px-4 py-2 text-red-600 hover:bg-gray-100">Delete</button>`);
+    }
+
+    return `
+        <div class="relative ml-auto">
+            <button onclick="togglePostMenu(${post.id}, event)" class="text-gray-400 hover:text-gray-600 p-1">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                </svg>
+            </button>
+            <div id="post-menu-${post.id}" class="hidden absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                ${menuItems.join('')}
+            </div>
+        </div>
+    `;
+}
+
+function renderPost(post, options = {}) {
+    const {
+        formatContent = formatPostContent,
+        currentUserVotes = {},
+        commentsHtml = null,  // If provided, shows comments inline (for single post view)
+    } = options;
+
+    const timeStr = formatTime(post.created_at);
+    const token = localStorage.getItem('token');
+    const canVote = token && !post.is_mine;
+    const voteButtonClass = canVote ? 'hover:opacity-80 cursor-pointer' : 'cursor-default';
+
+    // Track user's vote
+    if (post.user_vote !== null && currentUserVotes) {
+        currentUserVotes[post.id] = post.user_vote;
+    }
+
+    const visibilityIcon = renderVisibilityIcon(post.visibility || 'public');
+    const postMenu = renderPostMenu(post, token);
+
+    // Determine if page post or user post
+    const isPagePost = post.page && post.page.handle;
+    let headerHtml;
+
+    if (isPagePost) {
+        const pageUrl = `/p/${post.page.handle}`;
+        const pageIconUrl = post.page.icon_url || defaultPageIcons[post.page.kind] || defaultPageIcons.virtual;
+        headerHtml = `
+            <a href="${pageUrl}">
+                <img src="${pageIconUrl}" alt="" class="w-10 h-10 rounded-lg object-cover bg-gray-200">
+            </a>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <a href="${pageUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.page.name)}</a>
+                    ${visibilityIcon}
+                    <span class="text-gray-400 text-sm">${timeStr}</span>
+                    ${postMenu}
+                </div>
+                <p class="text-gray-800 mt-2 whitespace-pre-wrap break-words">${formatContent(post.content)}</p>
+            </div>
+        `;
+    } else {
+        const authorUrl = `/u/${post.author.handle}`;
+        const avatarUrl = post.author.avatar_url || '/static/default-avatar.svg';
+        headerHtml = `
+            <a href="${authorUrl}">
+                <img src="${avatarUrl}" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200">
+            </a>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <a href="${authorUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.author.name || post.author.handle)}</a>
+                    <span class="text-gray-400">@${post.author.handle}</span>
+                    ${visibilityIcon}
+                    <span class="text-gray-400 text-sm">${timeStr}</span>
+                    ${postMenu}
+                </div>
+                <p class="text-gray-800 mt-2 whitespace-pre-wrap break-words">${formatContent(post.content)}</p>
+            </div>
+        `;
+    }
+
+    // Comment button: toggleable in feed view, static count in single post view
+    const commentButton = commentsHtml !== null
+        ? `<div class="flex items-center gap-1 text-gray-500">
+               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+               </svg>
+               <span id="comment-count-${post.id}">${post.comment_count || 0}</span>
+           </div>`
+        : `<button onclick="toggleComments(${post.id})" class="flex items-center gap-1 text-gray-500 hover:text-brand-blue" id="comment-btn-${post.id}">
+               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+               </svg>
+               <span id="comment-count-${post.id}">${post.comment_count || 0}</span>
+           </button>`;
+
+    // Comments section: visible with content in single post view, hidden in feed view
+    const commentsSection = commentsHtml !== null
+        ? `<div id="comments-section-${post.id}" class="border-t border-gray-100">${commentsHtml}</div>`
+        : `<div id="comments-section-${post.id}" class="hidden border-t border-gray-100"></div>`;
+
+    return `
+        <div class="bg-white sm:rounded-lg shadow" data-post-id="${post.id}">
+            <div class="p-4">
+                <div class="flex items-start gap-3">
+                    ${headerHtml}
+                </div>
+                ${renderPostMedia(post.media)}
+                <div class="flex items-center gap-4 mt-3 text-sm">
+                    <div class="relative" id="vote-container-${post.id}">
+                        <button class="flex items-center gap-1.5 ${voteButtonClass}" ${canVote ? `onclick="toggleVotePicker(${post.id}, event)"` : ''}>
+                            <span id="scale-icon-${post.id}" class="${post.user_vote !== null ? 'ring-2 ring-brand-blue ring-offset-1 rounded-full' : ''}">${renderScaleIcon(post.display_level || 0, 24)}</span>
+                            <span id="vote-count-${post.id}" class="text-gray-500">${post.vote_count || 0}</span>
+                        </button>
+                        <div id="vote-picker-${post.id}" class="hidden"></div>
+                    </div>
+                    ${commentButton}
+                </div>
+            </div>
+            ${commentsSection}
+        </div>
+    `;
+}
+
+// --- Post Menu Handlers ---
+
+function togglePostMenu(postId, event) {
+    event.stopPropagation();
+    document.querySelectorAll('[id^="post-menu-"], [id^="comment-menu-"]').forEach(menu => {
+        if (menu.id !== `post-menu-${postId}`) {
+            menu.classList.add('hidden');
+        }
+    });
+    const menu = document.getElementById(`post-menu-${postId}`);
+    if (menu) {
+        menu.classList.toggle('hidden');
+    }
+}
+
+function closePostMenu(postId) {
+    const menu = document.getElementById(`post-menu-${postId}`);
+    if (menu) {
+        menu.classList.add('hidden');
+    }
+}
+
+function sharePost(postId) {
+    const url = `${window.location.origin}/post/${postId}`;
+    if (navigator.share) {
+        navigator.share({
+            title: 'Post on JustPros',
+            url: url
+        }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(url).catch(() => {
+            const textarea = document.createElement('textarea');
+            textarea.value = url;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+        });
+    }
+}
+
+// Close menus when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('[id^="comment-menu-"]') && !e.target.closest('[id^="post-menu-"]') && !e.target.closest('button')) {
+        document.querySelectorAll('[id^="comment-menu-"], [id^="post-menu-"]').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }
+});

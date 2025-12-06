@@ -177,6 +177,7 @@
     </div>
 </div>
 
+<script src="/static/js/posts.js"></script>
 <script>
     const pageHandle = '{{ handle }}';
     let pageData = null;
@@ -192,23 +193,18 @@
         virtual: 'Virtual Persona'
     };
 
-    const defaultIcons = {
-        company: '/static/default-page-company.svg',
-        event: '/static/default-page-event.svg',
-        product: '/static/default-page-product.svg',
-        community: '/static/default-page-community.svg',
-        virtual: '/static/default-page-virtual.svg'
-    };
+    // Uses shared functions from /static/js/posts.js:
+    // - escapeHtml, formatTime, formatPostContent, renderPostMedia, openImageModal, getDefaultPageIcon
+    // - renderPost, renderScaleIcon, renderVotePicker, togglePostMenu, closePostMenu, sharePost
 
     function getDefaultIcon(kind) {
-        return defaultIcons[kind] || defaultIcons.virtual;
+        return getDefaultPageIcon(kind);
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
+    // State for voting and comments (used by shared renderPost)
+    let currentUserVotes = {};
+    let expandedPosts = new Set();
+    let loadedComments = {};
 
     async function loadPageData() {
         try {
@@ -366,12 +362,298 @@
         const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
         try {
-            // TODO: Add page filter to posts endpoint
+            const response = await fetch(`/api/posts?page=${encodeURIComponent(pageHandle)}`, { headers });
+            if (!response.ok) {
+                console.error('Failed to load posts:', response.status);
+                return;
+            }
+
+            const data = await response.json();
             const container = document.getElementById('posts-container');
-            container.innerHTML = '';
-            document.getElementById('no-posts').classList.remove('hidden');
+
+            if (data.posts.length === 0) {
+                container.innerHTML = '';
+                document.getElementById('no-posts').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('no-posts').classList.add('hidden');
+            container.innerHTML = data.posts.map(post => renderPost(post, { currentUserVotes })).join('');
         } catch (e) {
             console.error('Failed to load posts:', e);
+        }
+    }
+
+    // --- Voting System (handlers for shared renderPost) ---
+
+    function toggleVotePicker(postId, event) {
+        event.stopPropagation();
+        const picker = document.getElementById(`vote-picker-${postId}`);
+        if (!picker) return;
+
+        document.querySelectorAll('[id^="vote-picker-"]').forEach(p => {
+            if (p.id !== `vote-picker-${postId}`) {
+                p.classList.add('hidden');
+            }
+        });
+
+        if (picker.classList.contains('hidden')) {
+            picker.innerHTML = renderVotePicker(postId, currentUserVotes[postId] ?? null);
+            picker.classList.remove('hidden');
+
+            const closeHandler = (e) => {
+                if (!picker.contains(e.target) && !e.target.closest(`#vote-container-${postId}`)) {
+                    picker.classList.add('hidden');
+                    document.removeEventListener('click', closeHandler);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', closeHandler), 0);
+        } else {
+            picker.classList.add('hidden');
+        }
+    }
+
+    async function submitVote(postId, value, event) {
+        event.stopPropagation();
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/posts/${postId}/vote`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ value })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                updateScaleDisplay(postId, data);
+                document.getElementById(`vote-picker-${postId}`).classList.add('hidden');
+            }
+        } catch (e) {
+            console.error('Failed to vote:', e);
+        }
+    }
+
+    function updateScaleDisplay(postId, data) {
+        currentUserVotes[postId] = data.user_vote;
+
+        const iconEl = document.getElementById(`scale-icon-${postId}`);
+        if (iconEl) {
+            iconEl.innerHTML = renderScaleIcon(data.display_level, 24);
+            if (data.user_vote !== null) {
+                iconEl.className = 'ring-2 ring-brand-blue ring-offset-1 rounded-full';
+            } else {
+                iconEl.className = '';
+            }
+        }
+
+        const countEl = document.getElementById(`vote-count-${postId}`);
+        if (countEl) {
+            countEl.textContent = data.vote_count;
+        }
+    }
+
+    // --- Comments System ---
+
+    async function toggleComments(postId) {
+        const section = document.getElementById(`comments-section-${postId}`);
+
+        if (expandedPosts.has(postId)) {
+            section.classList.add('hidden');
+            expandedPosts.delete(postId);
+        } else {
+            section.classList.remove('hidden');
+            expandedPosts.add(postId);
+
+            if (!loadedComments[postId]) {
+                section.innerHTML = '<div class="p-4 text-center text-gray-500">Loading...</div>';
+                await loadComments(postId);
+            } else {
+                renderCommentsSection(postId, loadedComments[postId]);
+            }
+        }
+    }
+
+    async function loadComments(postId) {
+        const token = localStorage.getItem('token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+        try {
+            const response = await fetch(`/api/posts/${postId}`, { headers });
+            if (!response.ok) {
+                console.error('Failed to load comments');
+                return;
+            }
+
+            const data = await response.json();
+            loadedComments[postId] = data.comments;
+            renderCommentsSection(postId, data.comments);
+        } catch (e) {
+            console.error('Failed to load comments:', e);
+        }
+    }
+
+    function renderCommentsSection(postId, comments) {
+        const section = document.getElementById(`comments-section-${postId}`);
+        const token = localStorage.getItem('token');
+
+        let html = '<div class="divide-y divide-gray-100">';
+
+        if (comments.length === 0) {
+            html += '<div class="p-4 text-center text-gray-500 text-sm">No comments yet</div>';
+        } else {
+            comments.forEach(comment => {
+                html += renderComment(comment, postId);
+            });
+        }
+
+        html += '</div>';
+
+        if (token) {
+            html += `
+                <div class="p-3 border-t border-gray-100">
+                    <form onsubmit="submitReply(event, ${postId})" class="flex gap-2">
+                        <input type="text" id="reply-input-${postId}" placeholder="Write a comment..." maxlength="2000"
+                            class="flex-1 px-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                        <button type="submit" class="px-4 py-2 bg-brand-blue text-white rounded-full hover:opacity-90 text-sm">
+                            Reply
+                        </button>
+                    </form>
+                </div>
+            `;
+        }
+
+        section.innerHTML = html;
+    }
+
+    function renderComment(comment, rootPostId) {
+        const authorUrl = `/u/${comment.author.handle}`;
+        const avatarUrl = comment.author.avatar_url || '/static/default-avatar.svg';
+        const timeStr = formatTime(comment.created_at);
+
+        return `
+            <div class="p-3 hover:bg-gray-50" id="comment-${comment.id}">
+                <div class="flex items-start gap-2">
+                    <a href="${authorUrl}" class="flex-shrink-0">
+                        <img src="${avatarUrl}" alt="" class="w-8 h-8 rounded-full object-cover bg-gray-200">
+                    </a>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap text-sm">
+                            <a href="${authorUrl}" class="font-medium text-gray-900 hover:underline">${escapeHtml(comment.author.name || comment.author.handle)}</a>
+                            <span class="text-gray-400 text-xs">${timeStr}</span>
+                        </div>
+                        <p class="text-gray-800 mt-1 whitespace-pre-wrap break-words text-sm">${formatPostContent(comment.content)}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    async function submitReply(event, rootPostId) {
+        event.preventDefault();
+
+        const input = document.getElementById(`reply-input-${rootPostId}`);
+        const content = input.value.trim();
+        if (!content) return;
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/posts/${rootPostId}/reply`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content })
+            });
+
+            if (response.ok) {
+                input.value = '';
+                delete loadedComments[rootPostId];
+                await loadComments(rootPostId);
+                const countEl = document.getElementById(`comment-count-${rootPostId}`);
+                if (countEl) {
+                    countEl.textContent = parseInt(countEl.textContent) + 1;
+                }
+            } else {
+                const error = await response.json();
+                alert(error.detail || 'Failed to post comment');
+            }
+        } catch (e) {
+            console.error('Failed to post comment:', e);
+            alert('Failed to post comment');
+        }
+    }
+
+    // --- Report and Delete ---
+
+    async function reportAbuse(postId) {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        if (!confirm('Report this content for abuse? Our team will review it.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/posts/${postId}/report`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                alert('Report submitted. Thank you for helping keep JustPros clean.');
+            } else {
+                const error = await response.json();
+                alert(error.detail || 'Failed to submit report');
+            }
+        } catch (e) {
+            console.error('Failed to report:', e);
+            alert('Failed to submit report');
+        }
+    }
+
+    function showDeleteModal(postId) {
+        if (confirm('Delete this post? This action cannot be undone.')) {
+            deletePost(postId);
+        }
+    }
+
+    async function deletePost(postId) {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        try {
+            const response = await fetch(`/api/posts/${postId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                await loadPosts();
+            } else {
+                const error = await response.json();
+                alert(error.detail || 'Failed to delete');
+            }
+        } catch (e) {
+            console.error('Failed to delete:', e);
+            alert('Failed to delete');
         }
     }
 

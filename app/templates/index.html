@@ -95,6 +95,7 @@
     </div>
 </div>
 
+<script src="/static/js/posts.js"></script>
 <script>
     let currentFilter = 'all';
     let isLoading = false;
@@ -108,13 +109,7 @@
     let replyingTo = {}; // Track which comment we're replying to: { rootPostId: commentId }
     let userPages = []; // Pages the user can post as (owner or editor)
     const COMMENT_TRUNCATE_LENGTH = 280; // Characters before truncating
-    const defaultPageIcons = {
-        company: '/static/default-page-company.svg',
-        event: '/static/default-page-event.svg',
-        product: '/static/default-page-product.svg',
-        community: '/static/default-page-community.svg',
-        virtual: '/static/default-page-virtual.svg'
-    };
+    // defaultPageIcons is provided by /static/js/posts.js
 
     const composerPlaceholders = [
         "What's on your mind?",
@@ -257,7 +252,7 @@
             if (data.posts.length === 0 && !append) {
                 noPosts.classList.remove('hidden');
             } else {
-                const postsHtml = data.posts.map(post => renderPost(post)).join('');
+                const postsHtml = data.posts.map(post => renderPost(post, { currentUserVotes })).join('');
                 if (append) {
                     postsList.insertAdjacentHTML('beforeend', postsHtml);
                 } else {
@@ -280,307 +275,14 @@
         }
     }
 
-    // Scale voting colors and config
-    const SCALE_COLORS = {
-        '-3': '#dc2626', '-2': '#ef4444', '-1': '#f87171',
-        '0': '#9ca3af',
-        '1': '#4ade80', '2': '#22c55e', '3': '#16a34a'
-    };
+    // Uses shared functions from /static/js/posts.js:
+    // - renderScaleIcon, renderVotePicker, SCALE_COLORS, getScaleColor
+    // - renderPost, renderVisibilityIcon, renderPostMenu
+    // - togglePostMenu, closePostMenu, sharePost
 
-    function getScaleColor(level) {
-        const clamped = Math.round(Math.max(-3, Math.min(3, level)));
-        return SCALE_COLORS[clamped.toString()];
-    }
-
-    function renderScaleIcon(level, size = 24) {
-        const displayLevel = Math.round(Math.max(-3, Math.min(3, level)));
-        const color = getScaleColor(displayLevel);
-        // Tilt: positive = right pan lower, negative = left pan lower
-        const tiltAngle = displayLevel * 8; // -24 to +24 degrees
-        const tiltRad = tiltAngle * Math.PI / 180;
-        // Beam pivot is at center (12, 6), beam half-length is 8
-        const beamHalf = 8;
-        const leftX = 12 - beamHalf * Math.cos(tiltRad);
-        const leftY = 6 - beamHalf * Math.sin(tiltRad);
-        const rightX = 12 + beamHalf * Math.cos(tiltRad);
-        const rightY = 6 + beamHalf * Math.sin(tiltRad);
-        // Chain length
-        const chainLen = 4;
-        const leftPanY = leftY + chainLen;
-        const rightPanY = rightY + chainLen;
-        return `
-            <svg width="${size}" height="${size}" viewBox="0 0 24 24">
-                <!-- Base -->
-                <rect x="8" y="20" width="8" height="2" rx="1" fill="${color}"/>
-                <!-- Center pillar (always vertical) -->
-                <rect x="11" y="6" width="2" height="14" fill="${color}"/>
-                <!-- Pivot point -->
-                <circle cx="12" cy="6" r="2" fill="${color}"/>
-                <!-- Beam (tilts) -->
-                <line x1="${leftX.toFixed(1)}" y1="${leftY.toFixed(1)}"
-                      x2="${rightX.toFixed(1)}" y2="${rightY.toFixed(1)}"
-                      stroke="${color}" stroke-width="2" stroke-linecap="round"/>
-                <!-- Left chain -->
-                <line x1="${leftX.toFixed(1)}" y1="${leftY.toFixed(1)}"
-                      x2="${leftX.toFixed(1)}" y2="${leftPanY.toFixed(1)}"
-                      stroke="${color}" stroke-width="1"/>
-                <!-- Right chain -->
-                <line x1="${rightX.toFixed(1)}" y1="${rightY.toFixed(1)}"
-                      x2="${rightX.toFixed(1)}" y2="${rightPanY.toFixed(1)}"
-                      stroke="${color}" stroke-width="1"/>
-                <!-- Left pan -->
-                <ellipse cx="${leftX.toFixed(1)}" cy="${(leftPanY + 1).toFixed(1)}" rx="3" ry="1.5" fill="${color}"/>
-                <!-- Right pan -->
-                <ellipse cx="${rightX.toFixed(1)}" cy="${(rightPanY + 1).toFixed(1)}" rx="3" ry="1.5" fill="${color}"/>
-            </svg>
-        `;
-    }
-
-    function renderVotePicker(postId, userVote) {
-        const levels = [-3, -2, -1, 0, 1, 2, 3];
-        const buttons = levels.map(v => {
-            const isSelected = userVote === v;
-            const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-1' : '';
-            const label = v > 0 ? `+${v}` : v.toString();
-            return `
-                <button onclick="submitVote(${postId}, ${v}, event)"
-                        class="w-7 h-7 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center"
-                        title="${label}">
-                    ${renderScaleIcon(v, 22)}
-                </button>
-            `;
-        }).join('');
-
-        return `
-            <div class="vote-picker absolute left-0 mt-2 bg-white shadow-lg rounded-xl p-3 z-50 border border-gray-200"
-                 onclick="event.stopPropagation()">
-                <div class="flex items-center justify-between gap-1">
-                    ${buttons}
-                </div>
-                <div class="text-center text-xs text-gray-400 mt-2">
-                    Click to vote • Click again to remove
-                </div>
-            </div>
-        `;
-    }
-
-    function renderPost(post) {
-        const authorUrl = `/u/${post.author.handle}`;
-        const avatarUrl = post.author.avatar_url || '/static/default-avatar.svg';
-        const timeStr = formatTime(post.created_at);
-
-        // Track user's vote for this post
-        if (post.user_vote !== null) {
-            currentUserVotes[post.id] = post.user_vote;
-        }
-
-        const token = localStorage.getItem('token');
-        const canVote = token && !post.is_mine;
-        const voteButtonClass = canVote ? 'hover:opacity-80 cursor-pointer' : 'cursor-default';
-
-        const visibilityIcon = post.visibility === 'public'
-            ? `<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Public">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-               </svg>`
-            : `<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Connections only">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-               </svg>`;
-
-        // Three dots menu for posts
-        const postMenuItems = [];
-        postMenuItems.push(`<button onclick="sharePost(${post.id}, '${post.author.handle}'); closePostMenu(${post.id})" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Share</button>`);
-        if (token && !post.is_mine) {
-            postMenuItems.push(`<button onclick="reportAbuse(${post.id}); closePostMenu(${post.id})" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Report Abuse</button>`);
-        }
-        if (post.is_mine) {
-            postMenuItems.push(`<button onclick="showDeleteModal(${post.id}); closePostMenu(${post.id})" class="w-full text-left px-4 py-2 text-red-600 hover:bg-gray-100">Delete</button>`);
-        }
-
-        const postMenu = `
-            <div class="relative ml-auto">
-                <button onclick="togglePostMenu(${post.id}, event)" class="text-gray-400 hover:text-gray-600 p-1">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
-                    </svg>
-                </button>
-                <div id="post-menu-${post.id}" class="hidden absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                    ${postMenuItems.join('')}
-                </div>
-            </div>
-        `;
-
-        // Page post header (if posting as a Page)
-        const isPagePost = post.page && post.page.handle;
-        const pageUrl = isPagePost ? `/p/${post.page.handle}` : '';
-        const pageIconUrl = isPagePost ? (post.page.icon_url || defaultPageIcons[post.page.kind] || defaultPageIcons.virtual) : '';
-
-        // Build header based on whether it's a page post or user post
-        let headerHtml;
-        if (isPagePost) {
-            headerHtml = `
-                <a href="${pageUrl}">
-                    <img src="${pageIconUrl}" alt="" class="w-10 h-10 rounded-lg object-cover bg-gray-200">
-                </a>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <a href="${pageUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.page.name)}</a>
-                        ${visibilityIcon}
-                        <span class="text-gray-400 text-sm">${timeStr}</span>
-                        ${postMenu}
-                    </div>
-                    <p class="text-gray-800 mt-2 whitespace-pre-wrap break-words">${formatContent(post.content)}</p>
-                </div>
-            `;
-        } else {
-            headerHtml = `
-                <a href="${authorUrl}">
-                    <img src="${avatarUrl}" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200">
-                </a>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <a href="${authorUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.author.name || post.author.handle)}</a>
-                        <span class="text-gray-400">@${post.author.handle}</span>
-                        ${visibilityIcon}
-                        <span class="text-gray-400 text-sm">${timeStr}</span>
-                        ${postMenu}
-                    </div>
-                    <p class="text-gray-800 mt-2 whitespace-pre-wrap break-words">${formatContent(post.content)}</p>
-                </div>
-            `;
-        }
-
-        return `
-            <div class="bg-white sm:rounded-lg shadow" data-post-id="${post.id}">
-                <div class="p-4">
-                    <div class="flex items-start gap-3">
-                        ${headerHtml}
-                    </div>
-                    ${renderPostMedia(post.media)}
-                    <div class="flex items-center gap-4 mt-3 text-sm">
-                        <div class="relative" id="vote-container-${post.id}">
-                            <button class="flex items-center gap-1.5 ${voteButtonClass}" ${canVote ? `onclick="toggleVotePicker(${post.id}, event)"` : ''}>
-                                <span id="scale-icon-${post.id}" class="${post.user_vote !== null ? 'ring-2 ring-brand-blue ring-offset-1 rounded-full' : ''}">${renderScaleIcon(post.display_level || 0, 24)}</span>
-                                <span id="vote-count-${post.id}" class="text-gray-500">${post.vote_count}</span>
-                            </button>
-                            <div id="vote-picker-${post.id}" class="hidden"></div>
-                        </div>
-                        <button onclick="toggleComments(${post.id})" class="flex items-center gap-1 text-gray-500 hover:text-brand-blue" id="comment-btn-${post.id}">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                            </svg>
-                            <span id="comment-count-${post.id}">${post.comment_count}</span>
-                        </button>
-                    </div>
-                </div>
-                <div id="comments-section-${post.id}" class="hidden border-t border-gray-100"></div>
-            </div>
-        `;
-    }
-
-    const TEXT_EMOJIS = {
-        ':)': '😊', ':-)': '😊', ':]': '😊',
-        ':D': '😄', ':-D': '😄',
-        ';)': '😉', ';-)': '😉',
-        ':P': '😛', ':-P': '😛', ':p': '😛', ':-p': '😛',
-        ':(': '😞', ':-(': '😞', ':[': '😞',
-        ":'(": '😢', ":'-(": '😢',
-        ':O': '😮', ':-O': '😮', ':o': '😮', ':-o': '😮',
-        'XD': '😆', 'xD': '😆',
-        '<3': '❤️',
-        ':*': '😘', ':-*': '😘',
-        'B)': '😎', 'B-)': '😎',
-        ':/': '😕', ':-/': '😕',
-        ':S': '😖', ':-S': '😖', ':s': '😖', ':-s': '😖',
-        '>:(': '😠', '>:-(': '😠',
-        'O:)': '😇', 'O:-)': '😇',
-        '>:)': '😈', '>:-)': '😈',
-        ':|': '😐', ':-|': '😐',
-        '^_^': '😊', '^-^': '😊',
-        '-_-': '😑',
-        'T_T': '😭', 'T-T': '😭',
-        ':3': '😺',
-    };
-
-    function convertTextEmojis(text) {
-        // Sort by length (longest first) to match longer patterns before shorter ones
-        const sorted = Object.keys(TEXT_EMOJIS).sort((a, b) => b.length - a.length);
-        for (const emoticon of sorted) {
-            text = text.split(emoticon).join(TEXT_EMOJIS[emoticon]);
-        }
-        return text;
-    }
-
-    function formatContent(content) {
-        // Escape HTML first
-        let escaped = escapeHtml(content);
-        // Extract URLs before emoticon conversion to protect them
-        const urlRegex = /(https?:\/\/[^\s<]+[^\s<.,;:!?\]\)"'])/gi;
-        const urls = [];
-        escaped = escaped.replace(urlRegex, (match) => {
-            urls.push(match);
-            return `\x00URL${urls.length - 1}\x00`;
-        });
-        // Convert text emoticons to emojis (URLs are now protected)
-        escaped = convertTextEmojis(escaped);
-        // Restore URLs as clickable links (nofollow to prevent reputation transfer)
-        escaped = escaped.replace(/\x00URL(\d+)\x00/g, (_, idx) => {
-            const url = urls[parseInt(idx)];
-            return `<a href="${url}" target="_blank" rel="nofollow noopener noreferrer" class="text-brand-blue hover:underline" onclick="event.stopPropagation()">${url}</a>`;
-        });
-        // Convert @mentions to links
-        escaped = escaped.replace(/@([a-z0-9_]{3,30})\b/g, '<a href="/u/$1" class="text-brand-blue hover:underline" onclick="event.stopPropagation()">@$1</a>');
-        return escaped;
-    }
-
-    function formatTime(isoString) {
-        if (!isoString) return '';
-        const date = new Date(isoString);
-        const now = new Date();
-        const diffMs = now - date;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
-
-        if (diffMins < 1) return 'now';
-        if (diffMins < 60) return `${diffMins}m`;
-        if (diffHours < 24) return `${diffHours}h`;
-        if (diffDays < 7) return `${diffDays}d`;
-        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    }
-
-    function escapeHtml(text) {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    function renderPostMedia(media) {
-        if (!media || media.length === 0) return '';
-
-        const m = media[0];
-        // Container with black background for letterboxing vertical media
-        // max-h-[80vh] limits height, object-contain preserves aspect ratio
-        // mx-auto centers media horizontally when it's narrower than container
-        if (m.type === 'video') {
-            return `<div class="mt-3 -mx-4 bg-black flex justify-center"><video src="${m.url}" controls controlsList="nodownload noplaybackrate" disablePictureInPicture class="max-w-full max-h-[80vh] object-contain" preload="metadata"></video></div>`;
-        }
-        return `<div class="mt-3 -mx-4 bg-black flex justify-center"><img src="${m.url}" alt="" class="max-w-full max-h-[80vh] object-contain cursor-pointer" onclick="openImageModal('${m.url}', event)"></div>`;
-    }
-
-    function openImageModal(url, event) {
-        event.stopPropagation();
-        // Create a simple fullscreen image viewer
-        const overlay = document.createElement('div');
-        overlay.id = 'image-modal';
-        overlay.className = 'fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[100] cursor-pointer';
-        overlay.onclick = () => overlay.remove();
-        overlay.innerHTML = `
-            <img src="${url}" class="max-w-full max-h-full object-contain">
-            <button class="absolute top-4 right-4 text-white text-3xl hover:text-gray-300">&times;</button>
-        `;
-        document.body.appendChild(overlay);
-    }
+    // All shared functions are provided by /static/js/posts.js:
+    // formatTime, escapeHtml, formatPostContent, renderPostMedia, openImageModal
+    // TEXT_EMOJIS, convertTextEmojis (used internally by formatPostContent)
 
     function setupInfiniteScroll() {
         window.addEventListener('scroll', () => {
@@ -1101,7 +803,7 @@
                             <span class="text-gray-400 text-xs">${timeStr}</span>
                             ${commentMenu}
                         </div>
-                        <p class="text-gray-800 mt-1 whitespace-pre-wrap break-words text-sm" id="content-${comment.id}" data-full="${escapeHtml(content)}">${formatContent(displayContent)}</p>
+                        <p class="text-gray-800 mt-1 whitespace-pre-wrap break-words text-sm" id="content-${comment.id}" data-full="${escapeHtml(content)}">${formatPostContent(displayContent)}</p>
                         ${showMoreButton}
                         <div class="flex items-center gap-3 mt-2 text-xs">
                             <div class="relative" id="vote-container-${comment.id}">
@@ -1124,7 +826,7 @@
         const expandBtn = document.getElementById(`expand-btn-${commentId}`);
         if (contentEl && expandBtn) {
             const fullContent = contentEl.dataset.full;
-            contentEl.innerHTML = formatContent(fullContent);
+            contentEl.innerHTML = formatPostContent(fullContent);
             expandBtn.remove();
         }
     }
@@ -1304,64 +1006,8 @@
         }
     }
 
-    // Post menu functions
-    function togglePostMenu(postId, event) {
-        event.stopPropagation();
-        // Close all other menus first
-        document.querySelectorAll('[id^="post-menu-"], [id^="comment-menu-"]').forEach(menu => {
-            if (menu.id !== `post-menu-${postId}`) {
-                menu.classList.add('hidden');
-            }
-        });
-        const menu = document.getElementById(`post-menu-${postId}`);
-        if (menu) {
-            menu.classList.toggle('hidden');
-        }
-    }
-
-    function closePostMenu(postId) {
-        const menu = document.getElementById(`post-menu-${postId}`);
-        if (menu) {
-            menu.classList.add('hidden');
-        }
-    }
-
-    function sharePost(postId, authorHandle) {
-        const url = `${window.location.origin}/u/${authorHandle}/post/${postId}`;
-        if (navigator.share) {
-            navigator.share({
-                title: 'Post on JustPros',
-                url: url
-            }).catch(() => {
-                // User cancelled - do nothing
-            });
-        } else {
-            copyToClipboard(url);
-        }
-    }
-
-    function copyToClipboard(text) {
-        navigator.clipboard.writeText(text).then(() => {
-            // Silent success
-        }).catch(() => {
-            // Fallback for older browsers
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-        });
-    }
-
-    // Close menus when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('[id^="comment-menu-"]') && !e.target.closest('[id^="post-menu-"]') && !e.target.closest('button')) {
-            document.querySelectorAll('[id^="comment-menu-"], [id^="post-menu-"]').forEach(menu => {
-                menu.classList.add('hidden');
-            });
-        }
-    });
+    // Post menu functions (togglePostMenu, closePostMenu, sharePost) are provided by /static/js/posts.js
+    // Close menus when clicking outside is also provided by /static/js/posts.js
 
     async function reportAbuse(postId) {
         const token = localStorage.getItem('token');

@@ -103,13 +103,13 @@ async def page_editors_page(request: Request, handle: str) -> HTMLResponse:
     )
 
 
-@router.api_route("/u/{handle}/post/{post_id}", methods=["GET", "HEAD"], response_class=HTMLResponse)
-async def single_post_page(request: Request, handle: str, post_id: int) -> HTMLResponse:
-    """Single post view with comments - for shared post links."""
-    # Fetch post data for OG meta tags
+@router.api_route("/post/{post_id}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def single_post_by_id(request: Request, post_id: int) -> HTMLResponse:
+    """Single post view by ID only - simpler share URL."""
+    # Fetch post and author data for OG meta tags
     post = await database.fetch_one(
         """
-        SELECT p.content, u.handle, u.first_name, u.middle_name, u.last_name, u.avatar_path
+        SELECT p.content, p.page_id, u.handle, u.first_name, u.middle_name, u.last_name, u.avatar_path
         FROM posts p
         JOIN users u ON u.id = p.author_id
         WHERE p.id = :post_id AND p.reply_to_id IS NULL
@@ -117,9 +117,28 @@ async def single_post_page(request: Request, handle: str, post_id: int) -> HTMLR
         {"post_id": post_id},
     )
 
-    context = {"handle": handle, "post_id": post_id}
+    if not post:
+        # Post not found - show 404-like page
+        context = {"handle": "", "post_id": post_id}
+        return request.app.state.templates.TemplateResponse(
+            request, "single_post.html", context
+        )
 
-    if post:
+    context = {"handle": post["handle"], "post_id": post_id}
+
+    # Check if this is a page post
+    if post["page_id"]:
+        page = await database.fetch_one(
+            "SELECT handle, name, icon_path FROM pages WHERE id = :page_id",
+            {"page_id": post["page_id"]},
+        )
+        if page:
+            context["author_name"] = page["name"]
+            context["handle"] = page["handle"]
+            # Use page icon for OG image if no media
+            if page["icon_path"]:
+                context["og_image"] = get_avatar_url(page["icon_path"])
+    else:
         first_name = post["first_name"] or ""
         middle_name = post["middle_name"]
         last_name = post["last_name"] or ""
@@ -129,26 +148,26 @@ async def single_post_page(request: Request, handle: str, post_id: int) -> HTMLR
             else f"{first_name} {last_name}".strip()
         )
         context["author_name"] = full_name or post["handle"]
-        # Truncate content for OG description
-        content = post["content"] or ""
-        context["og_description"] = content[:200] + "..." if len(content) > 200 else content
-
-        # Check for post media (image/video) for OG image
-        media = await database.fetch_one(
-            """
-            SELECT media_path, media_type FROM post_media
-            WHERE post_id = :post_id
-            ORDER BY display_order LIMIT 1
-            """,
-            {"post_id": post_id},
-        )
-
-        if media:
-            # Use media as OG image (works for images, videos show thumbnail on some platforms)
-            context["og_image"] = get_post_media_url(media["media_path"])
-        elif post["avatar_path"]:
-            # Fall back to author's avatar
+        # Use author avatar for OG image if no media
+        if post["avatar_path"]:
             context["og_image"] = get_avatar_url(post["avatar_path"])
+
+    # Truncate content for OG description
+    content = post["content"] or ""
+    context["og_description"] = content[:200] + "..." if len(content) > 200 else content
+
+    # Check for post media (image/video) for OG image - overrides avatar/icon
+    media = await database.fetch_one(
+        """
+        SELECT media_path, media_type FROM post_media
+        WHERE post_id = :post_id
+        ORDER BY display_order LIMIT 1
+        """,
+        {"post_id": post_id},
+    )
+
+    if media:
+        context["og_image"] = get_post_media_url(media["media_path"])
 
     return request.app.state.templates.TemplateResponse(
         request, "single_post.html", context

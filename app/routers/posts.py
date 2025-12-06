@@ -347,9 +347,14 @@ def format_post_response(
     vote_sum = post["vote_sum"]
     vote_count = post["vote_count"]
     average = vote_sum / vote_count if vote_count > 0 else 0
+
+    # For page posts, hide the actual author - the page is the public face
+    is_page_post = page_info is not None
+    author = None if is_page_post else _format_author(dict(post))
+
     result = {
         "id": post["id"],
-        "author": _format_author(dict(post)),
+        "author": author,
         "content": post["content"],
         "visibility": post["visibility"],
         "reply_to_id": post["reply_to_id"],
@@ -378,6 +383,7 @@ async def list_posts(
     filter: str = "all",
     before_id: int | None = None,
     limit: int = 20,
+    page: str | None = None,
 ) -> dict:
     """
     List feed posts (top-level posts only).
@@ -385,6 +391,8 @@ async def list_posts(
     Filters:
     - all: Public + own + connections' + followed pages' posts (default)
     - mine: Only own posts
+
+    If `page` is provided, returns only posts from that page (by handle).
     """
     if limit > 50:
         limit = 50
@@ -394,7 +402,25 @@ async def list_posts(
     # Build base query
     params: dict = {"limit": limit}
 
-    if filter == "mine":
+    # If page filter is provided, only show posts from that page
+    if page:
+        # Look up page by handle
+        page_row = await database.fetch_one(
+            "SELECT id FROM pages WHERE handle = :handle",
+            {"handle": page},
+        )
+        if not page_row:
+            return {"posts": [], "has_more": False}
+
+        base_query = """
+            SELECT p.*, u.handle, u.first_name, u.middle_name, u.last_name, u.headline, u.avatar_path
+            FROM posts p
+            JOIN users u ON u.id = p.author_id
+            WHERE p.reply_to_id IS NULL
+              AND p.page_id = :page_id
+        """
+        params["page_id"] = page_row["id"]
+    elif filter == "mine":
         if user_id is None:
             return {"posts": [], "has_more": False}
         base_query = """
@@ -555,8 +581,14 @@ async def get_post(
     # Get media for the post
     post_media = await get_post_media(post_id)
 
+    # Get page info if this is a page post
+    page_info = None
+    if post["page_id"]:
+        pages_info = await get_pages_info([post["page_id"]])
+        page_info = pages_info.get(post["page_id"])
+
     return {
-        "post": format_post_response(dict(post), user_id, user_vote, post_media),
+        "post": format_post_response(dict(post), user_id, user_vote, post_media, page_info),
         "comments": [
             format_post_response(dict(c), user_id, comment_votes.get(c["id"]))
             for c in comments
