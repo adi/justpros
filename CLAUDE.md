@@ -116,18 +116,20 @@ When helping design or modify features, prioritize:
    - Code structured so others can reasonably contribute.
 
 5. **Connections**
-   - Claim-based: One user describes relationship in a sentence
+
+   **Implemented:**
    - Mutually confirmed: Other party must confirm for public visibility
-   - Confirm/Ignore flow: Pending claims can be confirmed or ignored
-   - Auto-ignore: Claims not acted on within 30 days are auto-ignored
-   - Late confirmation: Ignored claims can be confirmed later
-   - Re-ignore: Confirmed claims can be re-ignored at any time
-   - Crowd-validated: Mutual connections can vote on claim credibility with Confirm/Infirm
-   - Visibly ordered: Connections displayed strongest-first
-   - Time decay: Power based on original claim date, asymptotically approaches 0 with a half time of 3 years
-   - Anti-spam: Claim creation rate limits (3/day per pair, 100/day global), Abuse reports rate limits (1/day per user, 100/day global)
-   - Karma system: 15 points, deductions for abuse, 1 point/month regen
-   - LLM-evaluated abuse reports as no one is able to manually do this work
+   - Confirm/Ignore flow: Pending requests can be confirmed or ignored
+   - Auto-ignore: Requests not acted on within 30 days are auto-ignored
+   - Late confirmation: Ignored requests can be confirmed later
+   - Re-ignore: Confirmed connections can be ignored at any time
+   - Basic rate limits for spam prevention
+
+   **Planned (future):**
+   - Claims system: Separate from connections, users describe relationship in a sentence
+   - Crowd-validated claims: Mutual connections can vote on claim credibility
+   - Time decay: Connection strength based on claim date
+   - LLM-evaluated abuse reports for automated moderation
 
 If a requested feature conflicts with the principles (e.g. growth-hacky engagement tricks), highlight the conflict and propose a simpler, more principled alternative.
 
@@ -183,11 +185,42 @@ async def update_my_profile(
   - Password reset flow
   - bcrypt password hashing (72-byte limit enforced)
 
-- **User Profiles**:
+- **User Profiles** (`/u/{handle}`):
   - Editable handle, name, headline, skills
+  - Avatar and cover image upload (R2 storage)
   - Handle availability check with rate limiting
   - Self-service data export (JSON)
   - Self-service account deletion
+
+- **Posts & Feed**:
+  - Text posts with optional media (images/videos)
+  - Reverse-chronological global feed at `/`
+  - Visibility: public or connections-only
+  - Scale voting system (-3 to +3) with tilting balance icon
+  - Threaded comments with nested replies
+  - Share posts via `/post/{post_id}` URL
+  - Report abuse functionality
+
+- **Pages** (organization profiles):
+  - Page types: company, event, product, community, virtual
+  - Page profile at `/p/{handle}` with icon, cover, description
+  - Owner and editor roles (editors can post on behalf of page)
+  - Editor invitation system with accept/decline flow
+  - Ownership transfer between editors
+  - Page posts appear in followers' feeds
+  - **Privacy**: Page post authors are hidden from API (only page shown)
+  - Follow/unfollow pages
+
+- **Connections**:
+  - Mutual confirmation required for visibility
+  - Pending connections management (confirm/ignore)
+  - Auto-ignore after 30 days of inactivity
+  - Late confirmation of ignored requests
+  - Re-ignore confirmed connections at any time
+
+- **Messages**:
+  - Real-time messaging between connected users
+  - WebSocket-based notifications
 
 - **Rate Limiting**:
   - Custom decorator-based rate limiter
@@ -204,20 +237,30 @@ async def update_my_profile(
   - `app/db.py` - Database connection
   - `app/auth.py` - JWT, password hashing, auth helpers
   - `app/email.py` - Resend email sending
+  - `app/storage.py` - R2/S3 media storage helpers
   - `app/ratelimit.py` - Rate limiting decorator
   - `app/migrate.py` - Database migration tool
   - `app/routers/auth.py` - Auth endpoints
-  - `app/routers/pages.py` - Page routes
-  - `app/routers/api.py` - API endpoints (profile, export, delete)
+  - `app/routers/pages.py` - HTML page routes
+  - `app/routers/api.py` - User API endpoints (profile, export, delete)
+  - `app/routers/posts.py` - Posts API (CRUD, voting, comments)
+  - `app/routers/page_api.py` - Pages API (CRUD, editors, follows)
+  - `app/routers/messages.py` - Messaging API
   - `app/templates/` - Jinja2 templates
+  - `static/js/posts.js` - Shared post rendering JavaScript
+
+- **Frontend Architecture**:
+  - Shared JavaScript in `static/js/posts.js` for consistent post rendering
+  - Key shared functions: `renderPost`, `renderScaleIcon`, `renderVotePicker`, `formatPostContent`, `sharePost`
+  - Templates use shared code: `index.html`, `page_profile.html`, `single_post.html`
 
 - **Stack**:
   - Python 3.11+
   - FastAPI + Uvicorn
   - PostgreSQL + asyncpg
   - Jinja2 templates
-  - HTMX 2.0.8 (CDN)
   - Tailwind CSS (CDN)
+  - Cloudflare R2 for media storage
   - Resend (transactional email)
   - bcrypt + PyJWT
 
@@ -229,6 +272,11 @@ async def update_my_profile(
 | `JWT_SECRET` | Secret for signing tokens (required) |
 | `RESEND_API_KEY` | Resend API key for emails (required) |
 | `BASE_URL` | Base URL for email links (required) |
+| `R2_ACCOUNT_ID` | Cloudflare R2 account ID |
+| `R2_ACCESS_KEY_ID` | R2 access key |
+| `R2_SECRET_ACCESS_KEY` | R2 secret key |
+| `R2_BUCKET_NAME` | R2 bucket name |
+| `R2_PUBLIC_URL` | Public URL for R2 bucket |
 
 ### GitHub Secrets
 
@@ -244,8 +292,22 @@ async def update_my_profile(
 git tag v0.x.x && git push origin v0.x.x
 ```
 
+### Key URLs
+
+| URL | Purpose |
+|-----|---------|
+| `/` | Home feed (chronological) |
+| `/u/{handle}` | User profile |
+| `/p/{handle}` | Page profile |
+| `/post/{post_id}` | Single post view (shareable) |
+| `/pages` | My pages list |
+| `/p/{handle}/editors` | Manage page editors |
+| `/messages` | Messages inbox |
+
 ### Next Steps
 
-- Connections system (claim-based, mutually confirmed)
-- Posts & chronological feed
-- Basic search by name and skills
+- A redesign of the voting UI. Remains -3,-2,-1,+1,+2,+3 but with a nicer UI. Balance(scales) UI is not cool.
+- Claims system (separate from connections, relationship descriptions)
+- Crowd-validated claims (mutual connections vote on credibility using the -3-+3 scale used for posts)
+- Time decay for claim strength (from which connection strength is agreggated)
+- LLM-evaluated abuse reports for automated moderation
