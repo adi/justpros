@@ -122,6 +122,9 @@
 
                     <!-- Action Buttons -->
                     <div id="action-buttons" class="flex gap-2 flex-shrink-0">
+                        <a id="create-post-btn" href="/?post_as={{ handle }}" class="hidden px-4 py-2 bg-brand-blue text-white rounded-md text-sm font-medium hover:opacity-90">
+                            Create Post
+                        </a>
                         <button id="follow-btn" onclick="toggleFollow()" class="hidden px-4 py-2 bg-brand-blue text-white rounded-md text-sm font-medium hover:opacity-90">
                             Follow
                         </button>
@@ -287,6 +290,9 @@
     }
 
     function showEditorControls() {
+        // Show create post button
+        document.getElementById('create-post-btn').classList.remove('hidden');
+
         // Show edit overlays for images
         document.getElementById('cover-edit-overlay').classList.remove('hidden');
         document.getElementById('icon-edit-overlay').classList.remove('hidden');

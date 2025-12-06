@@ -36,7 +36,7 @@
                                 </svg>
                                 <input type="file" id="media-input" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" class="hidden" onchange="handleMediaSelect(event)">
                             </label>
-                            <select id="post-as" class="hidden text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                            <select id="post-as" class="hidden text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-blue" onchange="handlePostAsChange()">
                                 <option value="">Yourself</option>
                             </select>
                             <select id="post-visibility" class="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-blue">
@@ -177,7 +177,15 @@
 
                 if (pagesResponse.ok) {
                     userPages = await pagesResponse.json();
-                    populatePostAsDropdown();
+                    // Check for post_as query parameter
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const postAsHandle = urlParams.get('post_as');
+                    populatePostAsDropdown(postAsHandle);
+
+                    // If post_as is set and valid, expand composer
+                    if (postAsHandle && userPages.some(p => p.handle === postAsHandle)) {
+                        expandComposer();
+                    }
                 }
             } catch (e) {
                 console.error('Failed to get user:', e);
@@ -588,7 +596,7 @@
         });
     }
 
-    function populatePostAsDropdown() {
+    function populatePostAsDropdown(preSelectHandle = null) {
         const select = document.getElementById('post-as');
         if (!select) return;
 
@@ -606,6 +614,29 @@
             userPages.map(page =>
                 `<option value="${page.id}">${escapeHtml(page.name)}</option>`
             ).join('');
+
+        // Pre-select page if handle provided
+        if (preSelectHandle) {
+            const page = userPages.find(p => p.handle === preSelectHandle);
+            if (page) {
+                select.value = page.id;
+                handlePostAsChange(); // Update visibility dropdown state
+            }
+        }
+    }
+
+    function handlePostAsChange() {
+        const postAs = document.getElementById('post-as').value;
+        const visibilitySelect = document.getElementById('post-visibility');
+
+        if (postAs) {
+            // Posting as a page - always public, hide visibility dropdown
+            visibilitySelect.classList.add('hidden');
+            visibilitySelect.value = 'public';
+        } else {
+            // Posting as yourself - show visibility dropdown
+            visibilitySelect.classList.remove('hidden');
+        }
     }
 
     // Composer expand/collapse
