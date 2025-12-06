@@ -554,10 +554,13 @@
         if (!media || media.length === 0) return '';
 
         const m = media[0];
+        // Container with black background for letterboxing vertical media
+        // max-h-[80vh] limits height, object-contain preserves aspect ratio
+        // mx-auto centers media horizontally when it's narrower than container
         if (m.type === 'video') {
-            return `<div class="mt-3 -mx-4"><video src="${m.url}" controls controlsList="nodownload noplaybackrate" disablePictureInPicture class="w-full" preload="metadata"></video></div>`;
+            return `<div class="mt-3 -mx-4 bg-black flex justify-center"><video src="${m.url}" controls controlsList="nodownload noplaybackrate" disablePictureInPicture class="max-w-full max-h-[80vh] object-contain" preload="metadata"></video></div>`;
         }
-        return `<div class="mt-3 -mx-4"><img src="${m.url}" alt="" class="w-full cursor-pointer" onclick="openImageModal('${m.url}', event)"></div>`;
+        return `<div class="mt-3 -mx-4 bg-black flex justify-center"><img src="${m.url}" alt="" class="max-w-full max-h-[80vh] object-contain cursor-pointer" onclick="openImageModal('${m.url}', event)"></div>`;
     }
 
     function openImageModal(url, event) {
