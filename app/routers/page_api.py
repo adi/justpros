@@ -6,7 +6,13 @@ from pydantic import BaseModel, field_validator
 from app.auth import get_current_user
 from app.db import database
 from app.routers.messages import notify_user
-from app.storage import get_avatar_url
+from app.storage import (
+    delete_page_cover,
+    delete_page_icon,
+    generate_page_cover_upload_url,
+    generate_page_icon_upload_url,
+    get_avatar_url,
+)
 
 router = APIRouter(prefix="/api/pages", tags=["page_api"])
 
@@ -105,6 +111,22 @@ class PageUpdate(BaseModel):
         if len(v) > 5000:
             raise ValueError("Description must be at most 5000 characters")
         return v if v else None
+
+
+class PageIconUploadUrlRequest(BaseModel):
+    content_type: str
+
+
+class PageIconConfirmRequest(BaseModel):
+    media_path: str
+
+
+class PageCoverUploadUrlRequest(BaseModel):
+    content_type: str
+
+
+class PageCoverConfirmRequest(BaseModel):
+    media_path: str
 
 
 # --- Helper Functions ---
@@ -392,6 +414,28 @@ async def decline_invitation(
     )
 
     return {"declined": True}
+
+
+@router.get("/following")
+async def list_following(
+    current_user: dict = Depends(get_current_user),
+) -> list[dict]:
+    """List pages the current user is following."""
+    user_id = current_user["id"]
+
+    pages = await database.fetch_all(
+        """
+        SELECT p.id, p.handle, p.name, p.kind, p.headline, p.icon_path, p.cover_path,
+               p.created_at, pf.created_at as followed_at
+        FROM page_follows pf
+        JOIN pages p ON p.id = pf.page_id
+        WHERE pf.user_id = :user_id
+        ORDER BY pf.created_at DESC
+        """,
+        {"user_id": user_id},
+    )
+
+    return [_format_page(dict(p)) for p in pages]
 
 
 @router.get("/{handle}")
@@ -820,3 +864,162 @@ async def get_follow_status(
         "is_editor": is_editor or is_owner,
         "has_pending_invitation": has_pending_invitation,
     }
+
+
+# --- Image Upload Endpoints ---
+
+
+@router.post("/{handle}/icon/upload-url")
+async def get_page_icon_upload_url(
+    handle: str,
+    payload: PageIconUploadUrlRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Get presigned URL for direct page icon upload."""
+    user_id = current_user["id"]
+
+    page = await _get_page_by_handle(handle)
+    if not page:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
+
+    if not await is_page_editor(page["id"], user_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    try:
+        result = generate_page_icon_upload_url(page["id"], payload.content_type)
+        return {"upload_url": result["upload_url"], "media_path": result["media_path"]}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/{handle}/icon/confirm")
+async def confirm_page_icon_upload(
+    handle: str,
+    payload: PageIconConfirmRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Confirm page icon upload after direct R2 upload."""
+    user_id = current_user["id"]
+
+    page = await _get_page_by_handle(handle)
+    if not page:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
+
+    if not await is_page_editor(page["id"], user_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    old_icon_path = page["icon_path"]
+
+    # Delete old icon only after confirming new one
+    if old_icon_path:
+        delete_page_icon(old_icon_path)
+
+    await database.execute(
+        "UPDATE pages SET icon_path = :path, updated_at = NOW() WHERE id = :id",
+        {"path": payload.media_path, "id": page["id"]},
+    )
+
+    return {"icon_url": get_avatar_url(payload.media_path)}
+
+
+@router.delete("/{handle}/icon")
+async def delete_page_icon_endpoint(
+    handle: str,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Delete page icon."""
+    user_id = current_user["id"]
+
+    page = await _get_page_by_handle(handle)
+    if not page:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
+
+    if not await is_page_editor(page["id"], user_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    if page["icon_path"]:
+        delete_page_icon(page["icon_path"])
+        await database.execute(
+            "UPDATE pages SET icon_path = NULL, updated_at = NOW() WHERE id = :id",
+            {"id": page["id"]},
+        )
+
+    return {"deleted": True}
+
+
+@router.post("/{handle}/cover/upload-url")
+async def get_page_cover_upload_url(
+    handle: str,
+    payload: PageCoverUploadUrlRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Get presigned URL for direct page cover upload."""
+    user_id = current_user["id"]
+
+    page = await _get_page_by_handle(handle)
+    if not page:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
+
+    if not await is_page_editor(page["id"], user_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    try:
+        result = generate_page_cover_upload_url(page["id"], payload.content_type)
+        return {"upload_url": result["upload_url"], "media_path": result["media_path"]}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/{handle}/cover/confirm")
+async def confirm_page_cover_upload(
+    handle: str,
+    payload: PageCoverConfirmRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Confirm page cover upload after direct R2 upload."""
+    user_id = current_user["id"]
+
+    page = await _get_page_by_handle(handle)
+    if not page:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
+
+    if not await is_page_editor(page["id"], user_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    old_cover_path = page["cover_path"]
+
+    # Delete old cover only after confirming new one
+    if old_cover_path:
+        delete_page_cover(old_cover_path)
+
+    await database.execute(
+        "UPDATE pages SET cover_path = :path, updated_at = NOW() WHERE id = :id",
+        {"path": payload.media_path, "id": page["id"]},
+    )
+
+    return {"cover_url": get_avatar_url(payload.media_path)}
+
+
+@router.delete("/{handle}/cover")
+async def delete_page_cover_endpoint(
+    handle: str,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Delete page cover."""
+    user_id = current_user["id"]
+
+    page = await _get_page_by_handle(handle)
+    if not page:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
+
+    if not await is_page_editor(page["id"], user_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    if page["cover_path"]:
+        delete_page_cover(page["cover_path"])
+        await database.execute(
+            "UPDATE pages SET cover_path = NULL, updated_at = NOW() WHERE id = :id",
+            {"id": page["id"]},
+        )
+
+    return {"deleted": True}

@@ -116,6 +116,36 @@ def generate_cover_upload_url(user_id: int, content_type: str) -> dict:
     return {"upload_url": _generate_upload_url(path, content_type), "media_path": path}
 
 
+def generate_page_icon_upload_url(page_id: int, content_type: str) -> dict:
+    """Generate presigned URL for direct page icon upload."""
+    ext = IMAGE_EXTENSION_MAP.get(content_type)
+    if ext is None:
+        raise ValueError(f"Unsupported content type: {content_type}")
+    random_id = secrets.token_hex(16)
+    path = f"page-icons/{random_id}.{ext}"
+    return {"upload_url": _generate_upload_url(path, content_type), "media_path": path}
+
+
+def generate_page_cover_upload_url(page_id: int, content_type: str) -> dict:
+    """Generate presigned URL for direct page cover upload."""
+    ext = IMAGE_EXTENSION_MAP.get(content_type)
+    if ext is None:
+        raise ValueError(f"Unsupported content type: {content_type}")
+    random_id = secrets.token_hex(16)
+    path = f"page-covers/{random_id}.{ext}"
+    return {"upload_url": _generate_upload_url(path, content_type), "media_path": path}
+
+
+def delete_page_icon(icon_path: str) -> None:
+    """Delete page icon from storage."""
+    s3.delete_object(Bucket=R2_BUCKET_NAME, Key=icon_path)
+
+
+def delete_page_cover(cover_path: str) -> None:
+    """Delete page cover from storage."""
+    s3.delete_object(Bucket=R2_BUCKET_NAME, Key=cover_path)
+
+
 def generate_post_media_upload_url(post_id: int, index: int, content_type: str) -> dict:
     """Generate presigned URL for direct post media upload."""
     ext = POST_MEDIA_EXTENSION_MAP.get(content_type)

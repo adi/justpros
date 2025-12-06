@@ -9,23 +9,115 @@
 <div class="sm:mt-2 w-full">
     <div class="bg-white sm:rounded-lg shadow overflow-hidden">
         <!-- Cover Image -->
-        <div id="cover-image" class="h-48 bg-gradient-to-r from-brand-blue to-brand-pink bg-cover bg-center"></div>
+        <div id="cover-container" class="relative group">
+            <div id="cover-image" class="h-48 bg-gradient-to-r from-brand-blue to-brand-pink bg-cover bg-center"></div>
+            <!-- Editor: Edit overlay for cover -->
+            <div id="cover-edit-overlay" class="hidden absolute inset-0 bg-black bg-opacity-0 sm:group-hover:bg-opacity-30 transition-all">
+                <div class="absolute top-3 right-3 flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <input type="file" id="cover-input" accept="image/jpeg,image/png,image/webp" class="hidden">
+                    <button onclick="document.getElementById('cover-input').click()" class="p-2 bg-white rounded-full shadow hover:bg-gray-100" title="Change cover">
+                        <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </button>
+                    <button id="cover-delete-btn" onclick="deleteCover()" class="hidden p-2 bg-white rounded-full shadow hover:bg-red-50" title="Delete cover">
+                        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="cover-message" class="absolute bottom-2 left-2 text-sm"></div>
+        </div>
 
         <!-- Profile Header -->
         <div class="relative px-6 pb-6">
             <!-- Icon -->
-            <div class="absolute -top-16 left-6">
+            <div id="icon-container" class="absolute -top-16 left-6 group">
                 <img id="page-icon" src="/static/placeholder.svg" alt=""
                      class="w-32 h-32 rounded-lg object-cover border-4 border-white shadow-lg bg-gray-200">
+                <!-- Editor: Edit overlay for icon -->
+                <div id="icon-edit-overlay" class="hidden absolute inset-0 rounded-lg bg-black bg-opacity-0 sm:group-hover:bg-opacity-30 transition-all flex items-center justify-center">
+                    <input type="file" id="icon-input" accept="image/jpeg,image/png,image/webp" class="hidden">
+                    <button onclick="document.getElementById('icon-input').click()" class="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-2 bg-white rounded-full shadow hover:bg-gray-100" title="Change icon">
+                        <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </button>
+                </div>
+                <button id="icon-delete-btn" onclick="deleteIcon()" class="hidden absolute -bottom-1 -right-1 p-1.5 bg-white rounded-full shadow border border-gray-200 hover:bg-red-50" title="Delete icon">
+                    <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+                <div id="icon-message" class="absolute -bottom-6 left-0 text-xs whitespace-nowrap"></div>
             </div>
 
             <!-- Profile Info -->
             <div class="pt-20">
                 <div class="flex items-start justify-between gap-4">
                     <div class="flex-1 min-w-0">
-                        <h1 id="page-name" class="text-2xl font-bold text-gray-900">{{ name|default(handle) }}</h1>
-                        <p id="page-kind" class="text-gray-500 mt-1"></p>
-                        <p id="page-headline" class="text-gray-600 mt-1">{{ headline }}</p>
+                        <!-- Name display/edit -->
+                        <div id="name-display" class="group flex items-center gap-2">
+                            <h1 id="page-name" class="text-2xl font-bold text-gray-900">{{ name|default(handle) }}</h1>
+                            <button id="name-edit-btn" onclick="startEditing('name')" class="hidden opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit name">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="name-edit-form" class="hidden">
+                            <div class="flex flex-wrap gap-2 items-center">
+                                <input type="text" id="edit-name" placeholder="Page name" maxlength="100" class="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue w-64">
+                                <button onclick="saveName()" class="px-3 py-1 bg-brand-blue text-white rounded text-sm hover:opacity-90">Save</button>
+                                <button onclick="cancelEditing('name')" class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">Cancel</button>
+                            </div>
+                            <p id="name-error" class="text-red-600 text-sm mt-1 hidden"></p>
+                        </div>
+
+                        <!-- Kind display/edit -->
+                        <div id="kind-display" class="group flex items-center gap-2 mt-1">
+                            <p id="page-kind" class="text-gray-500"></p>
+                            <button id="kind-edit-btn" onclick="startEditing('kind')" class="hidden opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit type">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="kind-edit-form" class="hidden mt-1">
+                            <div class="flex flex-wrap gap-2 items-center">
+                                <select id="edit-kind" class="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                                    <option value="company">Company</option>
+                                    <option value="event">Event</option>
+                                    <option value="product">Product / Service</option>
+                                    <option value="community">Community</option>
+                                    <option value="virtual">Virtual Persona</option>
+                                </select>
+                                <button onclick="saveKind()" class="px-3 py-1 bg-brand-blue text-white rounded text-sm hover:opacity-90">Save</button>
+                                <button onclick="cancelEditing('kind')" class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">Cancel</button>
+                            </div>
+                            <p id="kind-error" class="text-red-600 text-sm mt-1 hidden"></p>
+                        </div>
+
+                        <!-- Headline display/edit -->
+                        <div id="headline-display" class="group flex items-center gap-2 mt-1">
+                            <p id="page-headline" class="text-gray-600">{{ headline }}</p>
+                            <button id="headline-edit-btn" onclick="startEditing('headline')" class="hidden opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit headline">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="headline-edit-form" class="hidden mt-1">
+                            <div class="flex flex-wrap gap-2 items-center">
+                                <input type="text" id="edit-headline" placeholder="A short description" maxlength="200" class="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue w-64">
+                                <button onclick="saveHeadline()" class="px-3 py-1 bg-brand-blue text-white rounded text-sm hover:opacity-90">Save</button>
+                                <button onclick="cancelEditing('headline')" class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">Cancel</button>
+                            </div>
+                            <p id="headline-error" class="text-red-600 text-sm mt-1 hidden"></p>
+                        </div>
                     </div>
 
                     <!-- Action Buttons -->
@@ -44,9 +136,25 @@
                     <span><strong id="follower-count">0</strong> followers</span>
                 </div>
 
-                <!-- Description (inline) -->
-                <div id="description-section" class="hidden mt-4">
-                    <p id="page-description" class="text-gray-600 whitespace-pre-wrap"></p>
+                <!-- Description display/edit -->
+                <div id="description-display" class="group mt-4">
+                    <div class="flex items-start gap-2">
+                        <p id="page-description" class="text-gray-600 whitespace-pre-wrap flex-1"></p>
+                        <button id="description-edit-btn" onclick="startEditing('description')" class="hidden opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity flex-shrink-0" title="Edit description">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <p id="description-placeholder" class="hidden text-gray-400 text-sm">No description yet</p>
+                </div>
+                <div id="description-edit-form" class="hidden mt-4">
+                    <textarea id="edit-description" placeholder="Tell people about this page..." rows="4" maxlength="5000" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"></textarea>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="saveDescription()" class="px-3 py-1 bg-brand-blue text-white rounded text-sm hover:opacity-90">Save</button>
+                        <button onclick="cancelEditing('description')" class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">Cancel</button>
+                    </div>
+                    <p id="description-error" class="text-red-600 text-sm mt-1 hidden"></p>
                 </div>
             </div>
         </div>
@@ -71,6 +179,7 @@
     let pageData = null;
     let status = null;
     let isFollowing = false;
+    let editingSection = null;
 
     const kindLabels = {
         company: 'Company',
@@ -121,13 +230,12 @@
 
             if (pageData.cover_url) {
                 document.getElementById('cover-image').style.backgroundImage = `url(${pageData.cover_url})`;
-                document.getElementById('cover-image').style.backgroundSize = 'cover';
-                document.getElementById('cover-image').style.backgroundPosition = 'center';
             }
 
             if (pageData.description) {
                 document.getElementById('page-description').textContent = pageData.description;
-                document.getElementById('description-section').classList.remove('hidden');
+            } else {
+                document.getElementById('page-description').classList.add('hidden');
             }
 
             document.getElementById('follower-count').textContent = pageData.follower_count || 0;
@@ -163,6 +271,7 @@
 
             if (status.is_editor) {
                 manageBtn.classList.remove('hidden');
+                showEditorControls();
             }
 
             if (!status.is_owner) {
@@ -171,6 +280,31 @@
             }
         } catch (e) {
             console.error('Failed to load status:', e);
+        }
+    }
+
+    function showEditorControls() {
+        // Show edit overlays for images
+        document.getElementById('cover-edit-overlay').classList.remove('hidden');
+        document.getElementById('icon-edit-overlay').classList.remove('hidden');
+
+        // Show edit buttons
+        document.getElementById('name-edit-btn').classList.remove('hidden');
+        document.getElementById('kind-edit-btn').classList.remove('hidden');
+        document.getElementById('headline-edit-btn').classList.remove('hidden');
+        document.getElementById('description-edit-btn').classList.remove('hidden');
+
+        // Show delete buttons if images exist
+        if (pageData.cover_url) {
+            document.getElementById('cover-delete-btn').classList.remove('hidden');
+        }
+        if (pageData.icon_url) {
+            document.getElementById('icon-delete-btn').classList.remove('hidden');
+        }
+
+        // Show description placeholder if empty
+        if (!pageData.description) {
+            document.getElementById('description-placeholder').classList.remove('hidden');
         }
     }
 
@@ -224,7 +358,6 @@
 
         try {
             // TODO: Add page filter to posts endpoint
-            // For now, we'll show a message
             const container = document.getElementById('posts-container');
             container.innerHTML = '';
             document.getElementById('no-posts').classList.remove('hidden');
@@ -232,6 +365,366 @@
             console.error('Failed to load posts:', e);
         }
     }
+
+    // --- Inline Editing ---
+
+    function startEditing(section) {
+        if (editingSection && editingSection !== section) {
+            cancelEditing(editingSection);
+        }
+        editingSection = section;
+
+        document.getElementById(`${section}-display`).classList.add('hidden');
+        document.getElementById(`${section}-edit-form`).classList.remove('hidden');
+
+        // Pre-fill values
+        if (section === 'name') {
+            document.getElementById('edit-name').value = pageData.name || '';
+            document.getElementById('edit-name').focus();
+        } else if (section === 'kind') {
+            document.getElementById('edit-kind').value = pageData.kind || 'company';
+            document.getElementById('edit-kind').focus();
+        } else if (section === 'headline') {
+            document.getElementById('edit-headline').value = pageData.headline || '';
+            document.getElementById('edit-headline').focus();
+        } else if (section === 'description') {
+            document.getElementById('edit-description').value = pageData.description || '';
+            document.getElementById('edit-description').focus();
+        }
+    }
+
+    function cancelEditing(section) {
+        document.getElementById(`${section}-display`).classList.remove('hidden');
+        document.getElementById(`${section}-edit-form`).classList.add('hidden');
+        const errorEl = document.getElementById(`${section}-error`);
+        if (errorEl) errorEl.classList.add('hidden');
+        editingSection = null;
+    }
+
+    async function saveName() {
+        const token = localStorage.getItem('token');
+        const name = document.getElementById('edit-name').value.trim();
+        const errorEl = document.getElementById('name-error');
+
+        if (!name) {
+            errorEl.textContent = 'Name is required';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name })
+            });
+
+            if (response.ok) {
+                pageData.name = name;
+                document.getElementById('page-name').textContent = name;
+                cancelEditing('name');
+            } else {
+                const data = await response.json();
+                errorEl.textContent = data.detail || 'Failed to save';
+                errorEl.classList.remove('hidden');
+            }
+        } catch (e) {
+            errorEl.textContent = 'Failed to save';
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    async function saveKind() {
+        const token = localStorage.getItem('token');
+        const kind = document.getElementById('edit-kind').value;
+        const errorEl = document.getElementById('kind-error');
+
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ kind })
+            });
+
+            if (response.ok) {
+                pageData.kind = kind;
+                document.getElementById('page-kind').textContent = kindLabels[kind] || 'Page';
+                // Update icon if using default
+                if (!pageData.icon_url) {
+                    document.getElementById('page-icon').src = getDefaultIcon(kind);
+                }
+                cancelEditing('kind');
+            } else {
+                const data = await response.json();
+                errorEl.textContent = data.detail || 'Failed to save';
+                errorEl.classList.remove('hidden');
+            }
+        } catch (e) {
+            errorEl.textContent = 'Failed to save';
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    async function saveHeadline() {
+        const token = localStorage.getItem('token');
+        const headline = document.getElementById('edit-headline').value.trim();
+        const errorEl = document.getElementById('headline-error');
+
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ headline: headline || null })
+            });
+
+            if (response.ok) {
+                pageData.headline = headline;
+                document.getElementById('page-headline').textContent = headline;
+                cancelEditing('headline');
+            } else {
+                const data = await response.json();
+                errorEl.textContent = data.detail || 'Failed to save';
+                errorEl.classList.remove('hidden');
+            }
+        } catch (e) {
+            errorEl.textContent = 'Failed to save';
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    async function saveDescription() {
+        const token = localStorage.getItem('token');
+        const description = document.getElementById('edit-description').value.trim();
+        const errorEl = document.getElementById('description-error');
+
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ description: description || null })
+            });
+
+            if (response.ok) {
+                pageData.description = description;
+                const descEl = document.getElementById('page-description');
+                const placeholderEl = document.getElementById('description-placeholder');
+
+                if (description) {
+                    descEl.textContent = description;
+                    descEl.classList.remove('hidden');
+                    placeholderEl.classList.add('hidden');
+                } else {
+                    descEl.textContent = '';
+                    descEl.classList.add('hidden');
+                    placeholderEl.classList.remove('hidden');
+                }
+                cancelEditing('description');
+            } else {
+                const data = await response.json();
+                errorEl.textContent = data.detail || 'Failed to save';
+                errorEl.classList.remove('hidden');
+            }
+        } catch (e) {
+            errorEl.textContent = 'Failed to save';
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    // --- Image Upload ---
+
+    document.getElementById('cover-input').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.size > 5 * 1024 * 1024) {
+            document.getElementById('cover-message').innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">File too large (max 5MB)</span>';
+            return;
+        }
+
+        const token = localStorage.getItem('token');
+        const messageEl = document.getElementById('cover-message');
+        messageEl.innerHTML = '<span class="text-white bg-black bg-opacity-50 px-2 py-1 rounded">Uploading...</span>';
+
+        try {
+            const urlRes = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/cover/upload-url`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content_type: file.type })
+            });
+
+            if (!urlRes.ok) {
+                const data = await urlRes.json();
+                messageEl.innerHTML = `<span class="text-red-600 bg-white px-2 py-1 rounded">${data.detail || 'Failed'}</span>`;
+                return;
+            }
+
+            const { upload_url, media_path } = await urlRes.json();
+
+            const uploadRes = await fetch(upload_url, {
+                method: 'PUT',
+                headers: { 'Content-Type': file.type },
+                body: file
+            });
+
+            if (!uploadRes.ok) {
+                messageEl.innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">Upload failed</span>';
+                return;
+            }
+
+            const confirmRes = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/cover/confirm`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ media_path })
+            });
+
+            if (confirmRes.ok) {
+                const data = await confirmRes.json();
+                document.getElementById('cover-image').style.backgroundImage = `url(${data.cover_url})`;
+                pageData.cover_url = data.cover_url;
+                document.getElementById('cover-delete-btn').classList.remove('hidden');
+                messageEl.innerHTML = '<span class="text-green-600 bg-white px-2 py-1 rounded">Updated!</span>';
+                setTimeout(() => messageEl.innerHTML = '', 2000);
+            } else {
+                messageEl.innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">Failed</span>';
+            }
+        } catch (error) {
+            messageEl.innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">Failed</span>';
+        }
+        e.target.value = '';
+    });
+
+    document.getElementById('icon-input').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.size > 2 * 1024 * 1024) {
+            document.getElementById('icon-message').innerHTML = '<span class="text-red-600">Too large (max 2MB)</span>';
+            return;
+        }
+
+        const token = localStorage.getItem('token');
+        const messageEl = document.getElementById('icon-message');
+        messageEl.innerHTML = '<span class="text-gray-500">Uploading...</span>';
+
+        try {
+            const urlRes = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/icon/upload-url`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content_type: file.type })
+            });
+
+            if (!urlRes.ok) {
+                const data = await urlRes.json();
+                messageEl.innerHTML = `<span class="text-red-600">${data.detail || 'Failed'}</span>`;
+                return;
+            }
+
+            const { upload_url, media_path } = await urlRes.json();
+
+            const uploadRes = await fetch(upload_url, {
+                method: 'PUT',
+                headers: { 'Content-Type': file.type },
+                body: file
+            });
+
+            if (!uploadRes.ok) {
+                messageEl.innerHTML = '<span class="text-red-600">Upload failed</span>';
+                return;
+            }
+
+            const confirmRes = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/icon/confirm`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ media_path })
+            });
+
+            if (confirmRes.ok) {
+                const data = await confirmRes.json();
+                document.getElementById('page-icon').src = data.icon_url;
+                pageData.icon_url = data.icon_url;
+                document.getElementById('icon-delete-btn').classList.remove('hidden');
+                messageEl.innerHTML = '<span class="text-green-600">Updated!</span>';
+                setTimeout(() => messageEl.innerHTML = '', 2000);
+            } else {
+                messageEl.innerHTML = '<span class="text-red-600">Failed</span>';
+            }
+        } catch (error) {
+            messageEl.innerHTML = '<span class="text-red-600">Failed</span>';
+        }
+        e.target.value = '';
+    });
+
+    async function deleteCover() {
+        if (!confirm('Delete the cover image?')) return;
+
+        const token = localStorage.getItem('token');
+        const messageEl = document.getElementById('cover-message');
+
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/cover`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                document.getElementById('cover-image').style.backgroundImage = '';
+                document.getElementById('cover-image').className = 'h-48 bg-gradient-to-r from-brand-blue to-brand-pink bg-cover bg-center';
+                document.getElementById('cover-delete-btn').classList.add('hidden');
+                pageData.cover_url = null;
+                messageEl.innerHTML = '<span class="text-green-600 bg-white px-2 py-1 rounded">Deleted</span>';
+                setTimeout(() => messageEl.innerHTML = '', 2000);
+            } else {
+                messageEl.innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">Failed</span>';
+            }
+        } catch (error) {
+            messageEl.innerHTML = '<span class="text-red-600 bg-white px-2 py-1 rounded">Failed</span>';
+        }
+    }
+
+    async function deleteIcon() {
+        if (!confirm('Delete the page icon?')) return;
+
+        const token = localStorage.getItem('token');
+        const messageEl = document.getElementById('icon-message');
+
+        try {
+            const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/icon`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                document.getElementById('page-icon').src = getDefaultIcon(pageData.kind);
+                document.getElementById('icon-delete-btn').classList.add('hidden');
+                pageData.icon_url = null;
+                messageEl.innerHTML = '<span class="text-green-600">Deleted</span>';
+                setTimeout(() => messageEl.innerHTML = '', 2000);
+            } else {
+                messageEl.innerHTML = '<span class="text-red-600">Failed</span>';
+            }
+        } catch (error) {
+            messageEl.innerHTML = '<span class="text-red-600">Failed</span>';
+        }
+    }
+
+    // Close editing on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && editingSection) {
+            cancelEditing(editingSection);
+        }
+    });
 
     async function init() {
         await loadPageData();
