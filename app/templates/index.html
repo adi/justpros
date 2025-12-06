@@ -634,8 +634,9 @@
             visibilitySelect.classList.add('hidden');
             visibilitySelect.value = 'public';
         } else {
-            // Posting as yourself - show visibility dropdown
+            // Posting as yourself - show visibility dropdown, default to connections
             visibilitySelect.classList.remove('hidden');
+            visibilitySelect.value = 'connections';
         }
     }
 
