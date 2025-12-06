@@ -117,7 +117,14 @@
 
             if (!response.ok) {
                 if (response.status === 403) {
+                    alert('You do not have permission to manage editors for this page.');
                     window.location.href = `/p/${pageHandle}`;
+                } else if (response.status === 404) {
+                    alert('Page not found.');
+                    window.location.href = '/pages';
+                } else {
+                    console.error('Failed to load editors:', response.status);
+                    alert('Failed to load editors. Please try again.');
                 }
                 return;
             }
@@ -181,12 +188,13 @@
             }
         } catch (e) {
             console.error('Failed to load editors:', e);
+            alert('Failed to load editors. Please check your connection and try again.');
         }
     }
 
     async function inviteEditor() {
         const token = localStorage.getItem('token');
-        const handle = document.getElementById('invite-handle').value.trim().toLowerCase();
+        const handle = document.getElementById('invite-handle').value.trim().toLowerCase().replace(/^@/, '');
         const errorEl = document.getElementById('invite-error');
         const successEl = document.getElementById('invite-success');
         const btn = document.getElementById('invite-btn');
@@ -299,15 +307,26 @@
         }
     }
 
+    function isTokenValid(token) {
+        if (!token) return false;
+        try {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const payload = JSON.parse(window.atob(base64));
+            return payload && payload.exp * 1000 > Date.now();
+        } catch (e) {
+            return false;
+        }
+    }
+
     async function init() {
-        const isLoggedIn = await checkAuth();
-        if (!isLoggedIn) {
+        const token = localStorage.getItem('token');
+        if (!isTokenValid(token)) {
             window.location.href = '/login';
             return;
         }
 
         // Get current user handle
-        const token = localStorage.getItem('token');
         const meRes = await fetch('/api/me', {
             headers: { 'Authorization': `Bearer ${token}` }
         });

@@ -145,9 +145,21 @@
     });
 
     // Require login
+    function isTokenValid(token) {
+        if (!token) return false;
+        try {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const payload = JSON.parse(window.atob(base64));
+            return payload && payload.exp * 1000 > Date.now();
+        } catch (e) {
+            return false;
+        }
+    }
+
     async function init() {
-        const isLoggedIn = await checkAuth();
-        if (!isLoggedIn) {
+        const token = localStorage.getItem('token');
+        if (!isTokenValid(token)) {
             window.location.href = '/login';
         }
     }

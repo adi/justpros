@@ -260,7 +260,10 @@
             const response = await fetch(`/api/pages/${encodeURIComponent(pageHandle)}/status`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!response.ok) return;
+            if (!response.ok) {
+                console.error('Failed to load status:', response.status);
+                return;
+            }
 
             status = await response.json();
             isFollowing = status.is_following;
