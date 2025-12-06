@@ -133,62 +133,107 @@ function getScaleColor(level) {
     return SCALE_COLORS[clamped.toString()];
 }
 
-function renderScaleIcon(level, size = 24) {
-    const displayLevel = Math.round(Math.max(-3, Math.min(3, level)));
-    const color = getScaleColor(displayLevel);
-    const tiltAngle = displayLevel * 8;
-    const tiltRad = tiltAngle * Math.PI / 180;
-    const beamHalf = 8;
-    const leftX = 12 - beamHalf * Math.cos(tiltRad);
-    const leftY = 6 - beamHalf * Math.sin(tiltRad);
-    const rightX = 12 + beamHalf * Math.cos(tiltRad);
-    const rightY = 6 + beamHalf * Math.sin(tiltRad);
-    const chainLen = 4;
-    const leftPanY = leftY + chainLen;
-    const rightPanY = rightY + chainLen;
+function renderGaugeIcon(level, size = 24) {
+    const displayLevel = Math.max(-3, Math.min(3, level));
+    const color = getScaleColor(Math.round(displayLevel));
+
+    // Gauge geometry: semi-circle from left to right
+    const cx = 12, cy = 15;  // Center of the arc
+    const r = 9;             // Radius
+
+    // Needle angle: -3 = 180° (left), 0 = 90° (up), +3 = 0° (right)
+    const needleAngle = (90 - displayLevel * 30) * Math.PI / 180;
+    const needleLen = 7;
+    const needleX = cx + needleLen * Math.cos(needleAngle);
+    const needleY = cy - needleLen * Math.sin(needleAngle);
+
+    // Arc path (semi-circle from left to right)
+    const arcStartX = cx - r;
+    const arcEndX = cx + r;
+
     return `
         <svg width="${size}" height="${size}" viewBox="0 0 24 24">
-            <rect x="8" y="20" width="8" height="2" rx="1" fill="${color}"/>
-            <rect x="11" y="6" width="2" height="14" fill="${color}"/>
-            <circle cx="12" cy="6" r="2" fill="${color}"/>
-            <line x1="${leftX.toFixed(1)}" y1="${leftY.toFixed(1)}"
-                  x2="${rightX.toFixed(1)}" y2="${rightY.toFixed(1)}"
+            <defs>
+                <linearGradient id="gauge-gradient-${size}" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="${SCALE_COLORS['-3']}"/>
+                    <stop offset="25%" stop-color="${SCALE_COLORS['-1']}"/>
+                    <stop offset="50%" stop-color="${SCALE_COLORS['0']}"/>
+                    <stop offset="75%" stop-color="${SCALE_COLORS['1']}"/>
+                    <stop offset="100%" stop-color="${SCALE_COLORS['3']}"/>
+                </linearGradient>
+            </defs>
+            <!-- Gauge arc background -->
+            <path d="M ${arcStartX} ${cy} A ${r} ${r} 0 0 1 ${arcEndX} ${cy}"
+                  fill="none" stroke="#e5e7eb" stroke-width="3" stroke-linecap="round"/>
+            <!-- Gauge arc colored -->
+            <path d="M ${arcStartX} ${cy} A ${r} ${r} 0 0 1 ${arcEndX} ${cy}"
+                  fill="none" stroke="url(#gauge-gradient-${size})" stroke-width="2" stroke-linecap="round"/>
+            <!-- Needle -->
+            <line x1="${cx}" y1="${cy}" x2="${needleX.toFixed(1)}" y2="${needleY.toFixed(1)}"
                   stroke="${color}" stroke-width="2" stroke-linecap="round"/>
-            <line x1="${leftX.toFixed(1)}" y1="${leftY.toFixed(1)}"
-                  x2="${leftX.toFixed(1)}" y2="${leftPanY.toFixed(1)}"
-                  stroke="${color}" stroke-width="1"/>
-            <line x1="${rightX.toFixed(1)}" y1="${rightY.toFixed(1)}"
-                  x2="${rightX.toFixed(1)}" y2="${rightPanY.toFixed(1)}"
-                  stroke="${color}" stroke-width="1"/>
-            <ellipse cx="${leftX.toFixed(1)}" cy="${(leftPanY + 1).toFixed(1)}" rx="3" ry="1.5" fill="${color}"/>
-            <ellipse cx="${rightX.toFixed(1)}" cy="${(rightPanY + 1).toFixed(1)}" rx="3" ry="1.5" fill="${color}"/>
+            <!-- Center dot -->
+            <circle cx="${cx}" cy="${cy}" r="2" fill="${color}"/>
         </svg>
     `;
 }
 
+// Keep old name as alias for compatibility
+function renderScaleIcon(level, size = 24) {
+    return renderGaugeIcon(level, size);
+}
+
 function renderVotePicker(postId, userVote) {
-    const levels = [-3, -2, -1, 0, 1, 2, 3];
-    const buttons = levels.map(v => {
+    // Button order: [-3][-2][-1][X][+1][+2][+3]
+    const voteButtons = [-3, -2, -1].map(v => {
         const isSelected = userVote === v;
         const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-1' : '';
-        const label = v > 0 ? `+${v}` : v.toString();
+        const color = SCALE_COLORS[v.toString()];
         return `
             <button onclick="submitVote(${postId}, ${v}, event)"
-                    class="w-7 h-7 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center"
-                    title="${label}">
-                ${renderScaleIcon(v, 22)}
+                    class="w-8 h-8 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
+                    style="background-color: ${color}"
+                    title="${v}">
+                ${v}
             </button>
         `;
-    }).join('');
+    });
+
+    // X button for unvote (in the middle)
+    const isUnvoted = userVote === null || userVote === undefined;
+    const xRing = isUnvoted ? '' : '';  // No ring when unvoted (default state)
+    voteButtons.push(`
+        <button onclick="submitVote(${postId}, null, event)"
+                class="w-8 h-8 rounded-full ${xRing} hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
+                style="background-color: ${SCALE_COLORS['0']}"
+                title="Remove vote">
+            ✕
+        </button>
+    `);
+
+    // Positive votes
+    [1, 2, 3].forEach(v => {
+        const isSelected = userVote === v;
+        const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-1' : '';
+        const color = SCALE_COLORS[v.toString()];
+        const label = `+${v}`;
+        voteButtons.push(`
+            <button onclick="submitVote(${postId}, ${v}, event)"
+                    class="w-8 h-8 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
+                    style="background-color: ${color}"
+                    title="${label}">
+                ${label}
+            </button>
+        `);
+    });
 
     return `
         <div class="vote-picker absolute left-0 mt-2 bg-white shadow-lg rounded-xl p-3 z-50 border border-gray-200"
              onclick="event.stopPropagation()">
-            <div class="flex items-center justify-between gap-1">
-                ${buttons}
+            <div class="flex items-center gap-1.5">
+                ${voteButtons.join('')}
             </div>
             <div class="text-center text-xs text-gray-400 mt-2">
-                Click to vote • Click again to remove
+                Tap to vote • ✕ to remove
             </div>
         </div>
     `;

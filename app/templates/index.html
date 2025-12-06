@@ -611,14 +611,26 @@
         }
 
         try {
-            const response = await fetch(`/api/posts/${postId}/vote`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ value })
-            });
+            let response;
+            if (value === null) {
+                // Remove vote via DELETE
+                response = await fetch(`/api/posts/${postId}/vote`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+            } else {
+                // Submit vote via POST
+                response = await fetch(`/api/posts/${postId}/vote`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ value })
+                });
+            }
 
             if (response.ok) {
                 const data = await response.json();
