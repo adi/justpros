@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Facts to Review | JustPros{% endblock %}
+{% block content %}
+<div class="bg-white sm:rounded-lg shadow overflow-hidden">
+    <div class="p-4 border-b border-gray-200">
+        <h1 class="text-xl font-bold text-gray-900">Facts to Review</h1>
+        <p class="text-sm text-gray-500 mt-1">Review facts that others have made about you or your pages</p>
+    </div>
+
+    <!-- Content -->
+    <div id="content" class="min-h-[400px]">
+        <div id="loading" class="flex items-center justify-center p-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue"></div>
+        </div>
+        <div id="list" class="hidden divide-y divide-gray-100"></div>
+        <div id="empty" class="hidden flex items-center justify-center p-8">
+            <p class="text-gray-500 text-center">No facts to review. When someone creates a fact about you or your pages, it will appear here.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    let token = null;
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function linkifyMentions(content, mentions) {
+        if (!mentions || typeof mentions !== 'object') {
+            return escapeHtml(content);
+        }
+
+        // Escape content first, then replace names with links
+        let result = escapeHtml(content);
+
+        for (const [handle, info] of Object.entries(mentions)) {
+            const escapedHandle = escapeHtml(handle);
+            const escapedName = escapeHtml(info.name || handle);
+            const prefix = info.type === 'page' ? '/p/' : '/u/';
+            const link = `<a href="${prefix}${escapedHandle}" class="text-brand-blue hover:underline">${escapedName}</a>`;
+            // Replace the name with a link
+            result = result.replace(escapedName, link);
+        }
+
+        return result;
+    }
+
+    async function checkAuth() {
+        token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+            return false;
+        }
+        return true;
+    }
+
+    async function loadData() {
+        const loading = document.getElementById('loading');
+        const list = document.getElementById('list');
+        const empty = document.getElementById('empty');
+
+        loading.classList.remove('hidden');
+        list.classList.add('hidden');
+        empty.classList.add('hidden');
+
+        try {
+            const response = await fetch('/api/facts/pending-veto', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+                return;
+            }
+
+            const data = await response.json();
+
+            loading.classList.add('hidden');
+
+            if (data.length === 0) {
+                empty.classList.remove('hidden');
+            } else {
+                list.innerHTML = data.map(fact => renderFact(fact)).join('');
+                list.classList.remove('hidden');
+            }
+        } catch (error) {
+            console.error('Failed to load data:', error);
+            loading.classList.add('hidden');
+            empty.classList.remove('hidden');
+        }
+    }
+
+    function renderFact(fact) {
+        const author = fact.author || {};
+        const avatarUrl = author.avatar_url || '/static/default-avatar.svg';
+        const authorName = escapeHtml(author.name || author.handle || 'Unknown');
+        const authorHandle = escapeHtml(author.handle || '');
+        const content = linkifyMentions(fact.content, fact.mentions);
+        const createdAt = formatDate(fact.created_at);
+        const publicAt = formatDate(fact.public_at);
+
+        // Determine if still in cooldown and not approved
+        const now = new Date();
+        const publicDate = new Date(fact.public_at);
+        const inCooldown = now < publicDate && !fact.is_public;
+
+        const statusBadge = fact.is_public
+            ? `<span class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Public</span>`
+            : `<span class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full">Cooldown until ${publicAt}</span>`;
+
+        // Show approve button only during cooldown (not yet public)
+        const approveBtn = !fact.is_public
+            ? `<button onclick="approveFact(${fact.id})" class="px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 text-sm rounded-md hover:bg-green-100">Approve</button>`
+            : '';
+
+        return `
+            <div class="p-4 hover:bg-gray-50">
+                <div class="flex flex-col sm:flex-row sm:items-start gap-3">
+                    <a href="/u/${authorHandle}" class="flex items-center gap-3 flex-1 min-w-0">
+                        <img src="${avatarUrl}" alt="" class="w-10 h-10 rounded-full object-cover bg-gray-200 flex-shrink-0">
+                        <div class="min-w-0 flex-1">
+                            <div class="font-medium text-gray-900">${authorName}</div>
+                            <div class="text-sm text-gray-500">@${authorHandle}</div>
+                        </div>
+                    </a>
+                    <div class="flex flex-col items-end gap-1">
+                        <span class="text-xs text-gray-400">${createdAt}</span>
+                    </div>
+                </div>
+                <div class="mt-3 ml-0 sm:ml-13">
+                    <p class="text-gray-900">${content}</p>
+                    <div class="flex items-center gap-2 mt-2">
+                        ${statusBadge}
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                        ${approveBtn}
+                        <button onclick="vetoFact(${fact.id})" class="px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 text-sm rounded-md hover:bg-red-100">
+                            Veto
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function formatDate(isoString) {
+        if (!isoString) return '';
+        const date = new Date(isoString);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    async function approveFact(factId) {
+        if (!confirm('Approve this fact? It will become public immediately.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/facts/${factId}/approve`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                loadData();
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'Failed to approve');
+            }
+        } catch (error) {
+            alert('Failed to approve. Please try again.');
+        }
+    }
+
+    async function vetoFact(factId) {
+        if (!confirm('Veto this fact? It will be hidden from everyone.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/facts/${factId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                loadData();
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'Failed to veto');
+            }
+        } catch (error) {
+            alert('Failed to veto. Please try again.');
+        }
+    }
+
+    // Initialize
+    checkAuth().then(authed => {
+        if (authed) {
+            loadData();
+        }
+    });
+</script>
+{% endblock %}

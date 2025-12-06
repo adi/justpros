@@ -61,6 +61,11 @@ async def messages_conversation_page(request: Request, handle: str) -> HTMLRespo
     )
 
 
+@router.api_route("/facts/pending", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def facts_pending_page(request: Request) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(request, "facts_pending.html")
+
+
 @router.api_route("/pages", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def pages_list_page(request: Request) -> HTMLResponse:
     return request.app.state.templates.TemplateResponse(request, "pages_list.html")

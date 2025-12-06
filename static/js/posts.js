@@ -5,7 +5,8 @@ const defaultPageIcons = {
     event: '/static/default-page-event.svg',
     product: '/static/default-page-product.svg',
     community: '/static/default-page-community.svg',
-    virtual: '/static/default-page-virtual.svg'
+    virtual: '/static/default-page-virtual.svg',
+    education: '/static/default-page-education.svg'
 };
 
 function getDefaultPageIcon(kind) {

@@ -166,6 +166,109 @@
     </div>
 </div>
 
+<!-- Professional Facts Section -->
+<div id="facts-section" class="hidden sm:mt-4 mt-2 w-full">
+    <div class="bg-white sm:rounded-lg shadow overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-gray-900">Professional Facts</h2>
+                <button id="add-fact-btn" onclick="showAddFactModal()" class="hidden text-sm text-brand-blue hover:underline">
+                    + Add a fact
+                </button>
+            </div>
+        </div>
+        <div id="facts-list" class="divide-y divide-gray-100">
+            <!-- Facts will be loaded here -->
+        </div>
+        <div id="facts-empty" class="hidden px-6 py-8 text-center text-gray-500">
+            No professional facts yet
+        </div>
+    </div>
+</div>
+
+<!-- Add Fact Modal -->
+<div id="add-fact-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-900">Add a Professional Fact</h2>
+                <button onclick="hideAddFactModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Template Selection -->
+            <div id="template-selection" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">What type of fact?</label>
+                    <select id="fact-subject-type" onchange="updateTemplateOptions()" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                        <option value="">Select type...</option>
+                        <option value="company">About a company</option>
+                        <option value="education">About an education institution</option>
+                        <option value="user">About a person</option>
+                    </select>
+                </div>
+
+                <div id="template-options" class="hidden space-y-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Choose a template</label>
+                    <!-- Template buttons will be added here -->
+                </div>
+            </div>
+
+            <!-- Fact Form -->
+            <div id="fact-form" class="hidden space-y-4 mt-4">
+                <div id="fact-template-preview" class="p-3 bg-gray-50 rounded-md text-sm text-gray-600"></div>
+
+                <div id="subject-field">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                    <input type="text" id="fact-subject" placeholder="@handle" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                    <div id="subject-suggestions" class="hidden mt-1 border border-gray-200 rounded-md shadow-sm max-h-32 overflow-y-auto bg-white"></div>
+                </div>
+
+                <div id="from-date-field" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">From</label>
+                    <input type="text" id="fact-from-date" placeholder="e.g., 2020" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                </div>
+
+                <div id="to-date-field" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">To</label>
+                    <input type="text" id="fact-to-date" placeholder="e.g., 2023 or present" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                </div>
+
+                <div id="year-field" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Year</label>
+                    <input type="text" id="fact-year" placeholder="e.g., 2023" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                </div>
+
+                <div id="page-field" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">At (company/organization)</label>
+                    <input type="text" id="fact-page" placeholder="@company" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                    <div id="page-suggestions" class="hidden mt-1 border border-gray-200 rounded-md shadow-sm max-h-32 overflow-y-auto bg-white"></div>
+                </div>
+
+                <div id="content-field" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Your fact (freeform)</label>
+                    <textarea id="fact-content" rows="3" placeholder="Write your professional fact..." class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue"></textarea>
+                    <p class="text-xs text-gray-500 mt-1">Freeform facts are less trusted. Use templates when possible.</p>
+                </div>
+
+                <div id="fact-error" class="hidden text-red-600 text-sm"></div>
+
+                <div class="flex gap-3 pt-2">
+                    <button onclick="hideAddFactModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+                    <button onclick="submitFact()" class="flex-1 px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90">Add Fact</button>
+                </div>
+
+                <p class="text-xs text-gray-500 text-center">
+                    Facts have a 72-hour cooldown before going public. The subject can veto at any time.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Pending Request Modal (for incoming requests) -->
 <div id="pending-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
     <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
@@ -188,6 +291,7 @@
     </div>
 </div>
 
+<script src="/static/js/posts.js"></script>
 <script>
     const handle = '{{ handle }}';
     let profileData = null;
@@ -200,8 +304,10 @@
 
     function parseJwt(token) {
         try {
-            return JSON.parse(atob(token.split('.')[1]));
-        } catch {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            return JSON.parse(window.atob(base64));
+        } catch (e) {
             return null;
         }
     }
@@ -882,6 +988,569 @@
         if (e.target === e.currentTarget) hidePendingModal();
     });
 
-    loadPublicProfile();
+    // --- Facts System ---
+
+    let factsData = [];
+    let factTemplates = [];
+    let selectedTemplate = null;
+    let selectedSubjectType = null;
+
+    function linkifyMentions(content, mentions) {
+        if (!mentions || typeof mentions !== 'object') {
+            return escapeHtml(content);
+        }
+
+        // Escape content first, then replace names with links
+        let result = escapeHtml(content);
+
+        for (const [handle, info] of Object.entries(mentions)) {
+            const escapedHandle = escapeHtml(handle);
+            const escapedName = escapeHtml(info.name || handle);
+            const prefix = info.type === 'page' ? '/p/' : '/u/';
+            const link = `<a href="${prefix}${escapedHandle}" class="text-brand-blue hover:underline">${escapedName}</a>`;
+            // Replace the name with a link
+            result = result.replace(escapedName, link);
+        }
+
+        return result;
+    }
+
+    async function loadFacts() {
+        try {
+            const token = localStorage.getItem('token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+            const response = await fetch(`/api/facts/user/${encodeURIComponent(handle)}`, { headers });
+            if (!response.ok) return;
+
+            factsData = await response.json();
+
+            const factsSection = document.getElementById('facts-section');
+            const factsList = document.getElementById('facts-list');
+            const factsEmpty = document.getElementById('facts-empty');
+
+            // Show section if owner or has facts
+            if (isOwner || factsData.length > 0) {
+                factsSection.classList.remove('hidden');
+            }
+
+            // Show add button for owner
+            if (isOwner) {
+                document.getElementById('add-fact-btn').classList.remove('hidden');
+            }
+
+            if (factsData.length === 0) {
+                factsEmpty.classList.remove('hidden');
+                factsList.innerHTML = '';
+            } else {
+                factsEmpty.classList.add('hidden');
+                factsList.innerHTML = factsData.map(fact => renderFact(fact)).join('');
+            }
+        } catch (e) {
+            console.error('Failed to load facts:', e);
+        }
+    }
+
+    function renderFact(fact) {
+        const vote_count = fact.vote_count || 0;
+        const level = fact.display_level || 0;
+        const token = localStorage.getItem('token');
+        const canVote = token && fact.is_public && !fact.is_vetoed && !isOwner;
+
+        // Status badge
+        let statusBadge = '';
+        if (fact.is_vetoed) {
+            statusBadge = '<span class="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full">Vetoed</span>';
+        } else if (!fact.is_public) {
+            statusBadge = '<span class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full">Pending</span>';
+        }
+
+        // Delete/veto button for owner
+        const deleteBtn = isOwner ? `
+            <button onclick="deleteFact(${fact.id})" class="text-gray-400 hover:text-red-500" title="Delete fact">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+            </button>
+        ` : '';
+
+        // Vote button class based on whether user can vote
+        const voteButtonClass = canVote ? 'hover:opacity-80 cursor-pointer' : 'cursor-default';
+
+        return `
+            <div class="px-6 py-4 flex items-start gap-4" data-fact-id="${fact.id}">
+                <div class="flex-1 min-w-0">
+                    <p class="text-gray-900">${linkifyMentions(fact.content, fact.mentions)}</p>
+                    <div class="flex items-center gap-2 mt-2">
+                        ${statusBadge}
+                        <span class="text-xs text-gray-500">${formatFactTime(fact.created_at)}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <div class="relative" id="fact-vote-container-${fact.id}">
+                        <button class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="toggleFactVotePicker(${fact.id}, event)"` : ''}>
+                            <span class="flex items-center">
+                                ${renderGaugeIcon(level, 24)}
+                                ${renderUserVoteBadge(fact.user_vote)}
+                            </span>
+                            <span class="text-gray-500 text-sm">${vote_count}</span>
+                        </button>
+                        <div id="fact-vote-picker-${fact.id}" class="hidden"></div>
+                    </div>
+                    ${deleteBtn}
+                </div>
+            </div>
+        `;
+    }
+
+    function formatFactTime(dateStr) {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    async function deleteFact(factId) {
+        if (!confirm('Delete this fact?')) return;
+
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch(`/api/facts/${factId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                await loadFacts();
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'Failed to delete');
+            }
+        } catch (e) {
+            alert('Failed to delete fact');
+        }
+    }
+
+    async function voteOnFact(factId, value) {
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch(`/api/facts/${factId}/vote`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ value })
+            });
+
+            if (response.ok) {
+                await loadFacts();
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'Failed to vote');
+            }
+        } catch (e) {
+            alert('Failed to vote');
+        }
+    }
+
+    function toggleFactVotePicker(factId, event) {
+        event.stopPropagation();
+
+        // Close any other open vote pickers
+        document.querySelectorAll('[id^="fact-vote-picker-"]').forEach(picker => {
+            if (picker.id !== `fact-vote-picker-${factId}`) {
+                picker.classList.add('hidden');
+                picker.innerHTML = '';
+            }
+        });
+
+        const picker = document.getElementById(`fact-vote-picker-${factId}`);
+        if (picker.classList.contains('hidden')) {
+            // Find current user vote for this fact
+            const fact = factsData.find(f => f.id === factId);
+            const userVote = fact ? fact.user_vote : null;
+            picker.innerHTML = renderFactVotePickerContent(factId, userVote);
+            picker.classList.remove('hidden');
+        } else {
+            picker.classList.add('hidden');
+            picker.innerHTML = '';
+        }
+    }
+
+    function renderFactVotePickerContent(factId, userVote) {
+        // Button order: [-3][-2][-1][X][+1][+2][+3]
+        const voteButtons = [-3, -2, -1].map(v => {
+            const isSelected = userVote === v;
+            const color = SCALE_COLORS[v.toString()];
+            const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-2' : '';
+            return `
+                <button onclick="submitFactVote(${factId}, ${v}, event)"
+                        class="w-8 h-8 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
+                        style="background-color: ${color}"
+                        title="${v}">
+                    ${v}
+                </button>
+            `;
+        });
+
+        // X button for unvote (in the middle)
+        voteButtons.push(`
+            <button onclick="submitFactVote(${factId}, null, event)"
+                    class="w-8 h-8 rounded-full hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
+                    style="background-color: ${SCALE_COLORS['0']}"
+                    title="Remove vote">
+                ✕
+            </button>
+        `);
+
+        // Positive votes
+        [1, 2, 3].forEach(v => {
+            const isSelected = userVote === v;
+            const color = SCALE_COLORS[v.toString()];
+            const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-2' : '';
+            const label = `+${v}`;
+            voteButtons.push(`
+                <button onclick="submitFactVote(${factId}, ${v}, event)"
+                        class="w-8 h-8 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
+                        style="background-color: ${color}"
+                        title="${label}">
+                    ${label}
+                </button>
+            `);
+        });
+
+        return `
+            <div class="absolute right-0 mt-2 bg-white shadow-lg rounded-xl p-3 z-50 border border-gray-200"
+                 onclick="event.stopPropagation()">
+                <div class="flex items-center gap-1.5">
+                    ${voteButtons.join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    async function submitFactVote(factId, value, event) {
+        event.stopPropagation();
+
+        // Close picker
+        const picker = document.getElementById(`fact-vote-picker-${factId}`);
+        if (picker) {
+            picker.classList.add('hidden');
+            picker.innerHTML = '';
+        }
+
+        if (value === null) {
+            // Remove vote
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`/api/facts/${factId}/vote`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    await loadFacts();
+                }
+            } catch (e) {
+                console.error('Failed to remove vote:', e);
+            }
+        } else {
+            await voteOnFact(factId, value);
+        }
+    }
+
+    // Close fact vote pickers when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('[id^="fact-vote-container-"]')) {
+            document.querySelectorAll('[id^="fact-vote-picker-"]').forEach(picker => {
+                picker.classList.add('hidden');
+                picker.innerHTML = '';
+            });
+        }
+    });
+
+    // --- Add Fact Modal ---
+
+    function showAddFactModal() {
+        document.getElementById('add-fact-modal').classList.remove('hidden');
+        resetFactForm();
+        loadTemplates();
+    }
+
+    function hideAddFactModal() {
+        document.getElementById('add-fact-modal').classList.add('hidden');
+        resetFactForm();
+    }
+
+    function resetFactForm() {
+        document.getElementById('fact-subject-type').value = '';
+        document.getElementById('template-options').classList.add('hidden');
+        document.getElementById('fact-form').classList.add('hidden');
+        document.getElementById('fact-error').classList.add('hidden');
+        document.getElementById('fact-subject').value = '';
+        document.getElementById('fact-from-date').value = '';
+        document.getElementById('fact-to-date').value = '';
+        document.getElementById('fact-year').value = '';
+        document.getElementById('fact-page').value = '';
+        document.getElementById('fact-content').value = '';
+        selectedTemplate = null;
+        selectedSubjectType = null;
+    }
+
+    async function loadTemplates() {
+        try {
+            const response = await fetch('/api/facts/templates');
+            if (response.ok) {
+                factTemplates = await response.json();
+            }
+        } catch (e) {
+            console.error('Failed to load templates:', e);
+        }
+    }
+
+    function updateTemplateOptions() {
+        const subjectType = document.getElementById('fact-subject-type').value;
+        selectedSubjectType = subjectType;
+
+        const container = document.getElementById('template-options');
+        if (!subjectType) {
+            container.classList.add('hidden');
+            return;
+        }
+
+        const filtered = factTemplates.filter(t => t.subject_types.includes(subjectType));
+        container.innerHTML = `
+            <label class="block text-sm font-medium text-gray-700 mb-2">Choose a template</label>
+            ${filtered.map(t => `
+                <button type="button" onclick="selectTemplate('${t.id}')"
+                    class="w-full text-left px-3 py-2 border rounded-md hover:bg-gray-50 ${t.id === 'freeform' ? 'text-gray-500 border-dashed' : ''}">
+                    ${escapeHtml(t.label)}
+                    <span class="block text-xs text-gray-400 mt-0.5">${escapeHtml(t.format)}</span>
+                </button>
+            `).join('')}
+        `;
+        container.classList.remove('hidden');
+    }
+
+    function selectTemplate(templateId) {
+        selectedTemplate = factTemplates.find(t => t.id === templateId);
+        if (!selectedTemplate) return;
+
+        document.getElementById('fact-template-preview').textContent = selectedTemplate.format;
+
+        // Show/hide fields based on template
+        const fields = selectedTemplate.fields || [];
+        document.getElementById('from-date-field').classList.toggle('hidden', !fields.includes('from_date'));
+        document.getElementById('to-date-field').classList.toggle('hidden', !fields.includes('to_date'));
+        document.getElementById('year-field').classList.toggle('hidden', !fields.includes('year'));
+        document.getElementById('page-field').classList.toggle('hidden', !fields.includes('page'));
+        document.getElementById('content-field').classList.toggle('hidden', templateId !== 'freeform');
+        document.getElementById('subject-field').classList.toggle('hidden', templateId === 'freeform');
+
+        document.getElementById('fact-form').classList.remove('hidden');
+    }
+
+    // --- Autocomplete for handle fields ---
+
+    let autocompleteTimeout = null;
+
+    function debounce(fn, delay) {
+        return function(...args) {
+            clearTimeout(autocompleteTimeout);
+            autocompleteTimeout = setTimeout(() => fn.apply(this, args), delay);
+        };
+    }
+
+    async function searchHandles(query, filterType) {
+        const token = localStorage.getItem('token');
+        if (!token || query.length < 2) return [];
+
+        try {
+            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) return [];
+
+            const results = await response.json();
+
+            // Filter by type if specified
+            if (filterType === 'user') {
+                return results.filter(r => r.type === 'user');
+            } else if (filterType === 'page') {
+                return results.filter(r => r.type === 'page');
+            } else if (filterType === null && selectedSubjectType) {
+                // Filter based on selected subject type
+                if (selectedSubjectType === 'user') {
+                    return results.filter(r => r.type === 'user');
+                } else {
+                    // For company, education, etc. - filter pages by kind
+                    return results.filter(r => r.type === 'page' && r.kind === selectedSubjectType);
+                }
+            }
+            return results;
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function renderSuggestions(results, container, inputId) {
+        if (results.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+
+        container.innerHTML = results.map(r => {
+            const avatarUrl = r.avatar_url || r.icon_url || (r.type === 'user' ? '/static/default-avatar.svg' : '/static/default-page.svg');
+            const displayName = escapeHtml(r.name || r.handle);
+            const subtitle = r.type === 'page' ? escapeHtml(r.kind || '') : escapeHtml(r.headline || '');
+
+            return `
+                <div class="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                     onclick="selectSuggestion('${inputId}', '${escapeHtml(r.handle)}', '${escapeHtml(r.name || r.handle)}')">
+                    <img src="${avatarUrl}" alt="" class="w-8 h-8 rounded-full object-cover bg-gray-200 flex-shrink-0">
+                    <div class="min-w-0 flex-1">
+                        <div class="text-sm font-medium text-gray-900 truncate">${displayName}</div>
+                        <div class="text-xs text-gray-500 truncate">@${escapeHtml(r.handle)}${subtitle ? ' · ' + subtitle : ''}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.classList.remove('hidden');
+    }
+
+    function selectSuggestion(inputId, handle, name) {
+        const input = document.getElementById(inputId);
+        input.value = '@' + handle;
+        input.dataset.selectedHandle = handle;
+        input.dataset.selectedName = name;
+
+        // Hide suggestions
+        const suggestionsId = inputId === 'fact-subject' ? 'subject-suggestions' : 'page-suggestions';
+        document.getElementById(suggestionsId).classList.add('hidden');
+    }
+
+    function setupAutocomplete(inputId, suggestionsId, filterType) {
+        const input = document.getElementById(inputId);
+        const suggestions = document.getElementById(suggestionsId);
+
+        const doSearch = debounce(async (query) => {
+            // Remove @ prefix for search
+            const searchQuery = query.replace(/^@/, '');
+            if (searchQuery.length < 2) {
+                suggestions.classList.add('hidden');
+                return;
+            }
+
+            const results = await searchHandles(searchQuery, filterType);
+            renderSuggestions(results, suggestions, inputId);
+        }, 300);
+
+        input.addEventListener('input', (e) => {
+            doSearch(e.target.value);
+        });
+
+        input.addEventListener('focus', (e) => {
+            const val = e.target.value.replace(/^@/, '');
+            if (val.length >= 2) {
+                doSearch(e.target.value);
+            }
+        });
+
+        // Hide suggestions when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!input.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.classList.add('hidden');
+            }
+        });
+    }
+
+    // Initialize autocomplete for both fields
+    setupAutocomplete('fact-subject', 'subject-suggestions', null); // null = search both users and pages based on selectedSubjectType
+    setupAutocomplete('fact-page', 'page-suggestions', 'page'); // always search pages
+
+    async function submitFact() {
+        const token = localStorage.getItem('token');
+        const errorEl = document.getElementById('fact-error');
+        errorEl.classList.add('hidden');
+
+        if (!selectedTemplate) {
+            errorEl.textContent = 'Please select a template';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        const payload = {
+            template_id: selectedTemplate.id
+        };
+
+        // Get subject
+        const subjectValue = document.getElementById('fact-subject').value.replace('@', '').trim();
+        if (selectedSubjectType === 'user') {
+            payload.subject_user_handle = subjectValue;
+        } else if (selectedSubjectType && selectedTemplate.id !== 'freeform') {
+            payload.subject_page_handle = subjectValue;
+        }
+
+        // Get optional fields
+        if (selectedTemplate.fields.includes('from_date')) {
+            payload.from_date = document.getElementById('fact-from-date').value.trim();
+        }
+        if (selectedTemplate.fields.includes('to_date')) {
+            payload.to_date = document.getElementById('fact-to-date').value.trim();
+        }
+        if (selectedTemplate.fields.includes('year')) {
+            payload.year = document.getElementById('fact-year').value.trim();
+        }
+        if (selectedTemplate.fields.includes('page')) {
+            payload.page_handle = document.getElementById('fact-page').value.replace('@', '').trim();
+        }
+        if (selectedTemplate.id === 'freeform') {
+            payload.content = document.getElementById('fact-content').value.trim();
+        }
+
+        try {
+            const response = await fetch('/api/facts', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                hideAddFactModal();
+                await loadFacts();
+            } else {
+                const data = await response.json();
+                errorEl.textContent = data.detail || 'Failed to create fact';
+                errorEl.classList.remove('hidden');
+            }
+        } catch (e) {
+            errorEl.textContent = 'Failed to create fact';
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    document.getElementById('add-fact-modal').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) hideAddFactModal();
+    });
+
+    // Update escape key handler
+    const originalKeydown = document.onkeydown;
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            hideAddFactModal();
+        }
+    });
+
+    // Load facts after profile
+    const originalLoadProfile = loadPublicProfile;
+    async function loadPublicProfileWithFacts() {
+        await originalLoadProfile();
+        await loadFacts();
+    }
+
+    loadPublicProfileWithFacts();
 </script>
 {% endblock %}
