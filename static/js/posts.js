@@ -151,8 +151,12 @@ function renderGaugeIcon(level, size = 24) {
     const arcStartX = cx - r;
     const arcEndX = cx + r;
 
+    // Format score for tooltip
+    const scoreText = level > 0 ? `+${level}` : level.toString();
+
     return `
-        <svg width="${size}" height="${size}" viewBox="0 0 24 24">
+        <svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-label="Average score: ${scoreText}">
+            <title>Average score: ${scoreText}</title>
             <defs>
                 <linearGradient id="gauge-gradient-${size}" x1="0%" y1="0%" x2="100%" y2="0%">
                     <stop offset="0%" stop-color="${SCALE_COLORS['-3']}"/>
@@ -199,8 +203,8 @@ function renderVotePicker(postId, userVote) {
     // Button order: [-3][-2][-1][X][+1][+2][+3]
     const voteButtons = [-3, -2, -1].map(v => {
         const isSelected = userVote === v;
-        const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-1' : '';
         const color = SCALE_COLORS[v.toString()];
+        const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-2' : '';
         return `
             <button onclick="submitVote(${postId}, ${v}, event)"
                     class="w-8 h-8 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
@@ -212,11 +216,9 @@ function renderVotePicker(postId, userVote) {
     });
 
     // X button for unvote (in the middle)
-    const isUnvoted = userVote === null || userVote === undefined;
-    const xRing = isUnvoted ? '' : '';  // No ring when unvoted (default state)
     voteButtons.push(`
         <button onclick="submitVote(${postId}, null, event)"
-                class="w-8 h-8 rounded-full ${xRing} hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
+                class="w-8 h-8 rounded-full hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
                 style="background-color: ${SCALE_COLORS['0']}"
                 title="Remove vote">
             ✕
@@ -226,8 +228,8 @@ function renderVotePicker(postId, userVote) {
     // Positive votes
     [1, 2, 3].forEach(v => {
         const isSelected = userVote === v;
-        const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-1' : '';
         const color = SCALE_COLORS[v.toString()];
+        const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-2' : '';
         const label = `+${v}`;
         voteButtons.push(`
             <button onclick="submitVote(${postId}, ${v}, event)"
