@@ -257,7 +257,10 @@
 
             searchTimeout = setTimeout(async () => {
                 try {
-                    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                    const token = localStorage.getItem('token');
+                    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
                     if (!response.ok) return;
 
                     const results = await response.json();
