@@ -46,6 +46,12 @@
         }
     </script>
     <script src="https://unpkg.com/htmx.org@2.0.8"></script>
+    <style>
+        /* On touch devices (coarse pointer = finger), always show edit controls */
+        @media (pointer: coarse) {
+            .touch-show { opacity: 1 !important; }
+        }
+    </style>
 </head>
 <body class="min-h-screen bg-stone-150 flex flex-col min-w-[372px] text-sm">
     <nav class="bg-white shadow-sm sticky top-0 z-40">

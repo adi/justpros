@@ -15,7 +15,7 @@
             <div id="cover-image" class="h-48 bg-gray-300 bg-cover bg-center"></div>
             <!-- Owner: Edit overlay for cover -->
             <div id="cover-edit-overlay" class="hidden absolute inset-0 bg-black bg-opacity-0 sm:group-hover:bg-opacity-30 transition-all">
-                <div class="absolute top-3 right-3 flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                <div class="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 touch-show transition-opacity">
                     <input type="file" id="cover-input" accept="image/jpeg,image/png,image/webp" class="hidden">
                     <button onclick="document.getElementById('cover-input').click()" class="p-2 bg-white rounded-full shadow hover:bg-gray-100" title="Change cover">
                         <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -42,7 +42,7 @@
                 <!-- Owner: Edit overlay for avatar -->
                 <div id="avatar-edit-overlay" class="hidden absolute inset-0 rounded-full bg-black bg-opacity-0 sm:group-hover:bg-opacity-30 transition-all flex items-center justify-center">
                     <input type="file" id="avatar-input" accept="image/jpeg,image/png,image/webp" class="hidden">
-                    <button onclick="document.getElementById('avatar-input').click()" class="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-2 bg-white rounded-full shadow hover:bg-gray-100" title="Change photo">
+                    <button onclick="document.getElementById('avatar-input').click()" class="opacity-0 group-hover:opacity-100 touch-show transition-opacity p-2 bg-white rounded-full shadow hover:bg-gray-100" title="Change photo">
                         <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -64,7 +64,7 @@
                         <!-- Name display/edit -->
                         <div id="name-display" class="group flex items-center gap-2">
                             <h1 id="profile-name" class="text-2xl font-bold text-gray-900"></h1>
-                            <button id="name-edit-btn" onclick="startEditing('name')" class="hidden opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit name">
+                            <button id="name-edit-btn" onclick="startEditing('name')" class="hidden opacity-0 group-hover:opacity-100 touch-show p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit name">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
                                 </svg>
@@ -84,7 +84,7 @@
                         <!-- Handle display/edit -->
                         <div id="handle-display" class="group flex items-center gap-2 mt-1">
                             <p id="profile-handle" class="text-gray-500"></p>
-                            <button id="handle-edit-btn" onclick="startEditing('handle')" class="hidden opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit handle">
+                            <button id="handle-edit-btn" onclick="startEditing('handle')" class="hidden opacity-0 group-hover:opacity-100 touch-show p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit handle">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
                                 </svg>
@@ -106,7 +106,7 @@
                         <!-- Headline display/edit -->
                         <div id="headline-display" class="group flex items-center gap-2 mt-1">
                             <p id="profile-headline" class="text-gray-600"></p>
-                            <button id="headline-edit-btn" onclick="startEditing('headline')" class="hidden opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit headline">
+                            <button id="headline-edit-btn" onclick="startEditing('headline')" class="hidden opacity-0 group-hover:opacity-100 touch-show p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit headline">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
                                 </svg>
@@ -136,7 +136,7 @@
                 <!-- Skills display/edit -->
                 <div id="skills-display" class="group flex items-center gap-2 mt-4">
                     <div id="profile-skills" class="flex flex-wrap gap-2"></div>
-                    <button id="skills-edit-btn" onclick="startEditing('skills')" class="hidden opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit skills">
+                    <button id="skills-edit-btn" onclick="startEditing('skills')" class="hidden opacity-0 group-hover:opacity-100 touch-show p-1 text-gray-400 hover:text-gray-600 transition-opacity" title="Edit skills">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
                         </svg>
