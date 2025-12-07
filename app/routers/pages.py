@@ -8,8 +8,36 @@ router = APIRouter(tags=["pages"])
 
 
 @router.api_route("/signup", methods=["GET", "HEAD"], response_class=HTMLResponse)
-async def signup_page(request: Request) -> HTMLResponse:
-    return request.app.state.templates.TemplateResponse(request, "signup.html")
+async def signup_page(request: Request, invite: str | None = None) -> HTMLResponse:
+    context = {}
+
+    # If invite code provided, fetch inviter info for OG meta tags
+    if invite:
+        inviter = await database.fetch_one(
+            """
+            SELECT u.first_name, u.middle_name, u.last_name, u.avatar_path
+            FROM invite_codes ic
+            JOIN users u ON u.id = ic.user_id
+            WHERE ic.code = :code
+            """,
+            {"code": invite},
+        )
+        if inviter:
+            first_name = inviter["first_name"] or ""
+            middle_name = inviter["middle_name"]
+            last_name = inviter["last_name"] or ""
+            full_name = (
+                f"{first_name} {middle_name} {last_name}".replace("  ", " ").strip()
+                if middle_name
+                else f"{first_name} {last_name}".strip()
+            )
+            context["inviter_name"] = full_name
+            context["og_title"] = f"{full_name} invited you to connect on JustPros"
+            context["og_description"] = "Join JustPros - the clean professional network for leaders, builders, creatives, and doers."
+            if inviter["avatar_path"]:
+                context["og_image"] = get_avatar_url(inviter["avatar_path"])
+
+    return request.app.state.templates.TemplateResponse(request, "signup.html", context)
 
 
 @router.api_route("/login", methods=["GET", "HEAD"], response_class=HTMLResponse)

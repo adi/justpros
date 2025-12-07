@@ -1,6 +1,22 @@
 {% extends "base.html" %}
 
-{% block title %}Sign up | JustPros{% endblock %}
+{% block title %}{% if inviter_name %}{{ inviter_name }} invited you | JustPros{% else %}Sign up | JustPros{% endif %}{% endblock %}
+
+{% if og_title %}
+{% block og_title %}{{ og_title }}{% endblock %}
+{% block twitter_title %}{{ og_title }}{% endblock %}
+{% endif %}
+
+{% if og_description %}
+{% block og_description %}{{ og_description }}{% endblock %}
+{% block twitter_description %}{{ og_description }}{% endblock %}
+{% block description %}{{ og_description }}{% endblock %}
+{% endif %}
+
+{% if og_image %}
+{% block og_image %}{{ og_image }}{% endblock %}
+{% block twitter_image %}{{ og_image }}{% endblock %}
+{% endif %}
 
 {% block content %}
 <div class="max-w-md mx-auto">
