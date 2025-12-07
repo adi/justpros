@@ -108,16 +108,24 @@ function openImageModal(url, event) {
     const overlay = document.createElement('div');
     overlay.id = 'image-modal';
     overlay.className = 'fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[100] cursor-pointer';
-    overlay.onclick = () => overlay.remove();
+    overlay.onclick = () => closeImageModal();
     overlay.innerHTML = `<img src="${url}" alt="" class="max-w-full max-h-full object-contain">`;
     document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+}
+
+function closeImageModal() {
+    const modal = document.getElementById('image-modal');
+    if (modal) {
+        modal.remove();
+        document.body.style.overflow = '';
+    }
 }
 
 // Close image modal on escape
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        const modal = document.getElementById('image-modal');
-        if (modal) modal.remove();
+        closeImageModal();
     }
 });
 
