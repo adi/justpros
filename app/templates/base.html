@@ -51,6 +51,10 @@
         @media (pointer: coarse) {
             .touch-show { opacity: 1 !important; }
         }
+        /* Safe area padding for notched devices */
+        .safe-area-pb {
+            padding-bottom: env(safe-area-inset-bottom, 0);
+        }
     </style>
 </head>
 <body class="min-h-screen bg-stone-150 flex flex-col min-w-[372px] text-sm">
@@ -133,6 +137,25 @@
             <a href="mailto:adrian.punga@gmail.com" class="hover:text-gray-900">Contact</a>
         </div>
     </footer>
+
+    <!-- Add to Home Screen prompt (mobile only) -->
+    <div id="install-prompt" class="hidden fixed bottom-0 left-0 right-0 bg-brand-blue shadow-lg z-50 safe-area-pb">
+        <div class="max-w-[1200px] mx-auto px-4 py-3 flex items-center gap-3">
+            <img src="/static/logo.svg" alt="JustPros" class="w-10 h-10 flex-shrink-0 bg-white rounded-lg p-1">
+            <div class="flex-1 min-w-0">
+                <p class="font-medium text-white text-sm">Add JustPros to Home Screen</p>
+                <p class="text-xs text-blue-100">Quick access, works offline</p>
+            </div>
+            <button onclick="dismissInstallPrompt()" class="text-blue-200 hover:text-white p-1 flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="max-w-[1200px] mx-auto px-4 pb-3">
+            <p id="install-instructions" class="text-xs text-blue-100"></p>
+        </div>
+    </div>
     <script>
         function parseJwt(token) {
             try {
@@ -256,7 +279,49 @@
             }
         });
 
-        checkAuth();
+        checkAuth().then(isLoggedIn => {
+            if (isLoggedIn) {
+                maybeShowInstallPrompt();
+            }
+        });
+
+        // Add to Home Screen prompt
+        function maybeShowInstallPrompt() {
+            // Don't show if already in standalone/PWA mode
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                || window.navigator.standalone === true
+                || document.referrer.includes('android-app://');
+
+            if (isStandalone) return;
+
+            // Don't show if user dismissed it
+            if (localStorage.getItem('install-prompt-dismissed')) return;
+
+            // Only show on mobile (touch device with narrow screen)
+            const isMobile = window.matchMedia('(pointer: coarse)').matches && window.innerWidth < 768;
+            if (!isMobile) return;
+
+            // Detect platform and set instructions
+            const ua = navigator.userAgent;
+            const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            const isAndroid = /Android/.test(ua);
+
+            const instructionsEl = document.getElementById('install-instructions');
+            if (isIOS) {
+                instructionsEl.innerHTML = 'Tap <svg class="inline w-4 h-4 align-text-bottom" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> in Safari, then "Add to Home Screen"';
+            } else if (isAndroid) {
+                instructionsEl.innerHTML = 'Tap <svg class="inline w-4 h-4 align-text-bottom" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/></svg> menu, then "Add to Home Screen" or "Install App"';
+            } else {
+                return; // Don't show on other platforms
+            }
+
+            document.getElementById('install-prompt').classList.remove('hidden');
+        }
+
+        function dismissInstallPrompt() {
+            document.getElementById('install-prompt').classList.add('hidden');
+            localStorage.setItem('install-prompt-dismissed', 'true');
+        }
 
         // Search functionality
         const searchInput = document.getElementById('search');
