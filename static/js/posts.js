@@ -152,21 +152,19 @@ const DOWNVOTE_COLOR = '#dc2626';  // Red for downvotes
 const DISABLED_COLOR = '#9ca3af';  // Gray for disabled
 
 function renderUpArrow(isActive = false, disabled = false) {
-    const color = disabled ? DISABLED_COLOR : (isActive ? UPVOTE_COLOR : 'currentColor');
-    const fill = isActive && !disabled ? UPVOTE_COLOR : 'none';
+    const fill = disabled ? DISABLED_COLOR : (isActive ? UPVOTE_COLOR : '#6b7280');
     return `
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="${fill}" stroke="${color}" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/>
+        <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <polygon points="12,6 5,16 19,16" fill="${fill}"/>
         </svg>
     `;
 }
 
 function renderDownArrow(isActive = false, disabled = false) {
-    const color = disabled ? DISABLED_COLOR : (isActive ? DOWNVOTE_COLOR : 'currentColor');
-    const fill = isActive && !disabled ? DOWNVOTE_COLOR : 'none';
+    const fill = disabled ? DISABLED_COLOR : (isActive ? DOWNVOTE_COLOR : '#6b7280');
     return `
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="${fill}" stroke="${color}" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+        <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <polygon points="12,18 5,8 19,8" fill="${fill}"/>
         </svg>
     `;
 }
