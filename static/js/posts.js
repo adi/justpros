@@ -207,7 +207,6 @@ function renderVisibilityIcon(visibility) {
 
 function renderPostMenu(post, token) {
     const menuItems = [];
-    menuItems.push(`<button onclick="sharePost(${post.id}); closePostMenu(${post.id})" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Share</button>`);
     if (token && !post.is_mine) {
         menuItems.push(`<button onclick="reportAbuse(${post.id}); closePostMenu(${post.id})" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Report Abuse</button>`);
     }
@@ -294,17 +293,16 @@ function renderPost(post, options = {}) {
     }
 
     // Comment button: toggleable in feed view, static count in single post view
+    const commentIcon = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+    </svg>`;
     const commentButton = commentsHtml !== null
-        ? `<div class="flex items-center gap-1 text-brand-blue">
-               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-               </svg>
+        ? `<div class="flex items-center gap-1 px-3 py-1 border border-gray-200 rounded-full bg-gray-50 text-gray-600">
+               ${commentIcon}
                <span id="comment-count-${post.id}">${post.comment_count || 0}</span>
            </div>`
-        : `<button onclick="toggleComments(${post.id})" class="flex items-center gap-1 text-brand-blue hover:opacity-80" id="comment-btn-${post.id}">
-               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-               </svg>
+        : `<button onclick="toggleComments(${post.id})" class="flex items-center gap-1 px-3 py-1 border border-gray-200 rounded-full bg-gray-50 text-gray-600 hover:bg-gray-100 cursor-pointer" id="comment-btn-${post.id}">
+               ${commentIcon}
                <span id="comment-count-${post.id}">${post.comment_count || 0}</span>
            </button>`;
 
@@ -312,6 +310,14 @@ function renderPost(post, options = {}) {
     const commentsSection = commentsHtml !== null
         ? `<div id="comments-section-${post.id}" class="border-t border-gray-100">${commentsHtml}</div>`
         : `<div id="comments-section-${post.id}" class="hidden border-t border-gray-100"></div>`;
+
+    // Share button
+    const shareIcon = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+    </svg>`;
+    const shareButton = `<button onclick="sharePost(${post.id})" class="flex items-center gap-1 px-3 py-1 border border-gray-200 rounded-full bg-gray-50 text-gray-600 hover:bg-gray-100 cursor-pointer">
+        ${shareIcon}
+    </button>`;
 
     return `
         <div class="bg-white sm:rounded-lg shadow" data-post-id="${post.id}">
@@ -325,6 +331,8 @@ function renderPost(post, options = {}) {
                         ${renderVoteButtons(post.id, upvotes, downvotes, post.user_vote, canVote, 'post')}
                     </div>
                     ${commentButton}
+                    <div class="flex-1"></div>
+                    ${shareButton}
                 </div>
             </div>
             ${commentsSection}
