@@ -103,6 +103,8 @@ function renderPostMedia(media) {
     return `<div class="mt-3 -mx-4 bg-black flex justify-center"><img src="${m.url}" alt="" class="max-w-full max-h-[80vh] object-contain cursor-pointer" onclick="openImageModal('${m.url}', event)"></div>`;
 }
 
+let scrollPositionBeforeModal = 0;
+
 function openImageModal(url, event) {
     event.stopPropagation();
     const overlay = document.createElement('div');
@@ -111,6 +113,13 @@ function openImageModal(url, event) {
     overlay.onclick = () => closeImageModal();
     overlay.innerHTML = `<img src="${url}" alt="" class="max-w-full max-h-full object-contain">`;
     document.body.appendChild(overlay);
+
+    // Lock scroll - iOS Safari requires position fixed approach
+    scrollPositionBeforeModal = window.scrollY;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollPositionBeforeModal}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
     document.body.style.overflow = 'hidden';
 }
 
@@ -118,7 +127,14 @@ function closeImageModal() {
     const modal = document.getElementById('image-modal');
     if (modal) {
         modal.remove();
+
+        // Restore scroll
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
         document.body.style.overflow = '';
+        window.scrollTo(0, scrollPositionBeforeModal);
     }
 }
 
