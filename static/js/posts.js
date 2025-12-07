@@ -173,9 +173,14 @@ function renderVoteButtons(itemId, upvotes, downvotes, userVote, canVote, voteTy
     const isUpvoted = userVote === 1;
     const isDownvoted = userVote === -1;
     const disabled = !canVote;
-    const upvoteColor = isUpvoted && canVote ? `color: ${UPVOTE_COLOR}; font-weight: 600;` : '';
-    const downvoteColor = isDownvoted && canVote ? `color: ${DOWNVOTE_COLOR}; font-weight: 600;` : '';
-    const textColor = disabled ? `color: ${DISABLED_COLOR};` : '';
+    const score = upvotes - downvotes;
+
+    // Score color: green if positive, red if negative, gray otherwise
+    let scoreColor = disabled ? DISABLED_COLOR : '#6b7280';
+    if (!disabled) {
+        if (isUpvoted) scoreColor = UPVOTE_COLOR;
+        else if (isDownvoted) scoreColor = DOWNVOTE_COLOR;
+    }
 
     const voteFunc = voteType === 'post' ? 'submitVote' : 'submitFactVote';
     const upClick = canVote ? `onclick="${voteFunc}(${itemId}, ${isUpvoted ? 'null' : '1'}, event)"` : '';
@@ -184,14 +189,12 @@ function renderVoteButtons(itemId, upvotes, downvotes, userVote, canVote, voteTy
 
     return `
         <div class="flex items-center border border-gray-200 rounded-full bg-gray-50">
-            <button ${upClick} class="flex items-center gap-1 px-2 py-1 rounded-l-full ${cursorClass}" style="${upvoteColor || textColor}">
+            <button ${upClick} class="px-2 py-1 rounded-l-full ${cursorClass}">
                 ${renderUpArrow(isUpvoted, disabled)}
-                <span id="${voteType}-upvotes-${itemId}">${upvotes}</span>
             </button>
-            <div class="w-px h-5 bg-gray-200"></div>
-            <button ${downClick} class="flex items-center gap-1 px-2 py-1 rounded-r-full ${cursorClass}" style="${downvoteColor || textColor}">
+            <span id="${voteType}-score-${itemId}" class="text-sm font-medium min-w-[1.5rem] text-center" style="color: ${scoreColor}">${score}</span>
+            <button ${downClick} class="px-2 py-1 rounded-r-full ${cursorClass}">
                 ${renderDownArrow(isDownvoted, disabled)}
-                <span id="${voteType}-downvotes-${itemId}">${downvotes}</span>
             </button>
         </div>
     `;
