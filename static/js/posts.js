@@ -282,7 +282,6 @@ function renderPost(post, options = {}) {
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
                     <a href="${authorUrl}" class="font-medium text-base text-gray-900 hover:underline">${escapeHtml(post.author.name || post.author.handle)}</a>
-                    <span class="text-gray-400">@${post.author.handle}</span>
                     ${visibilityIcon}
                     <span class="text-gray-400 text-sm">${timeStr}</span>
                     ${postMenu}
