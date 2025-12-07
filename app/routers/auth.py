@@ -40,6 +40,7 @@ async def signup(
     first_name: Annotated[str, Form()],
     last_name: Annotated[str, Form()],
     middle_name: Annotated[str | None, Form()] = None,
+    invite: Annotated[str | None, Form()] = None,
 ) -> str:
     validate_password(password)
 
@@ -57,10 +58,12 @@ async def signup(
         hours=VERIFICATION_TOKEN_EXPIRY_HOURS
     )
 
-    await database.execute(
+    # Get the new user's ID from insert
+    new_user = await database.fetch_one(
         """
         INSERT INTO users (handle, email, password_hash, first_name, middle_name, last_name, verification_token, verification_token_expires)
         VALUES (:handle, :email, :password_hash, :first_name, :middle_name, :last_name, :verification_token, :verification_token_expires)
+        RETURNING id
         """,
         {
             "handle": handle,
@@ -73,6 +76,33 @@ async def signup(
             "verification_token_expires": verification_expires,
         },
     )
+
+    # Handle invite code - create confirmed connection between inviter and new user
+    # Signing up through an invite link is implicit approval of the connection
+    if invite and new_user:
+        inviter = await database.fetch_one(
+            """
+            SELECT u.id FROM invite_codes ic
+            JOIN users u ON u.id = ic.user_id
+            WHERE ic.code = :code
+            """,
+            {"code": invite},
+        )
+        if inviter:
+            new_user_id = new_user["id"]
+            inviter_id = inviter["id"]
+            # Ensure consistent ordering (smaller id first)
+            u1 = min(inviter_id, new_user_id)
+            u2 = max(inviter_id, new_user_id)
+            # Create confirmed connection - signing up via invite link is mutual consent
+            await database.execute(
+                """
+                INSERT INTO connections (user1_id, user2_id, status, requested_by, requested_at, responded_at)
+                VALUES (:u1, :u2, 'confirmed', :requester, NOW(), NOW())
+                ON CONFLICT (user1_id, user2_id) DO NOTHING
+                """,
+                {"u1": u1, "u2": u2, "requester": inviter_id},
+            )
 
     send_verification_email(email, verification_token, first_name)
 

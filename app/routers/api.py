@@ -1,4 +1,5 @@
 import re
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
@@ -476,6 +477,44 @@ async def search_users(
         })
 
     return results
+
+
+@router.get("/me/invite-code")
+async def get_invite_code(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Get or generate the user's personal invite code."""
+    user_id = current_user["id"]
+
+    # Check if user already has an invite code
+    existing = await database.fetch_one(
+        "SELECT code FROM invite_codes WHERE user_id = :user_id",
+        {"user_id": user_id},
+    )
+
+    if existing:
+        return {"code": existing["code"]}
+
+    # Generate a new invite code (8 characters, url-safe)
+    code = secrets.token_urlsafe(6)[:8]
+
+    # Insert the new code (handle race condition with ON CONFLICT)
+    await database.execute(
+        """
+        INSERT INTO invite_codes (user_id, code)
+        VALUES (:user_id, :code)
+        ON CONFLICT (user_id) DO NOTHING
+        """,
+        {"user_id": user_id, "code": code},
+    )
+
+    # Fetch the code (in case of race condition, get the existing one)
+    result = await database.fetch_one(
+        "SELECT code FROM invite_codes WHERE user_id = :user_id",
+        {"user_id": user_id},
+    )
+
+    return {"code": result["code"]}
 
 
 @router.get("/u/{handle}")

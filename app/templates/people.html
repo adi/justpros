@@ -2,8 +2,14 @@
 {% block title %}People | JustPros{% endblock %}
 {% block content %}
 <div class="bg-white sm:rounded-lg shadow overflow-hidden">
-    <div class="p-4 border-b border-gray-200">
+    <div class="p-4 border-b border-gray-200 flex items-center justify-between">
         <h1 class="text-xl font-bold text-gray-900">People</h1>
+        <button id="invite-btn" onclick="copyInviteLink()" class="px-4 py-2 bg-brand-blue text-white rounded-md hover:opacity-90 text-sm flex items-center gap-2">
+            <svg id="invite-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+            <span id="invite-text">Copy invite link</span>
+        </button>
     </div>
 
     <!-- Tabs -->
@@ -321,5 +327,67 @@
             loadData();
         }
     });
+
+    // Copy invite link with personalized code
+    let inviteCode = null;
+
+    async function getInviteCode() {
+        if (inviteCode) return inviteCode;
+        try {
+            const response = await fetch('/api/me/invite-code', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                inviteCode = data.code;
+                return inviteCode;
+            }
+        } catch (e) {
+            console.error('Failed to get invite code:', e);
+        }
+        return null;
+    }
+
+    async function copyInviteLink() {
+        const btn = document.getElementById('invite-btn');
+        const text = document.getElementById('invite-text');
+        const icon = document.getElementById('invite-icon');
+
+        // Get personalized invite code
+        const code = await getInviteCode();
+        const link = code
+            ? `${window.location.origin}/signup?invite=${code}`
+            : window.location.origin;
+
+        const showCopied = () => {
+            btn.disabled = true;
+            btn.classList.remove('bg-brand-blue', 'hover:opacity-90');
+            btn.classList.add('bg-gray-400', 'cursor-default');
+            text.textContent = 'Copied!';
+            icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>';
+
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.classList.remove('bg-gray-400', 'cursor-default');
+                btn.classList.add('bg-brand-blue', 'hover:opacity-90');
+                text.textContent = 'Copy invite link';
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>';
+            }, 2000);
+        };
+
+        try {
+            await navigator.clipboard.writeText(link);
+            showCopied();
+        } catch (e) {
+            // Fallback for older browsers
+            const input = document.createElement('input');
+            input.value = link;
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            document.body.removeChild(input);
+            showCopied();
+        }
+    }
 </script>
 {% endblock %}

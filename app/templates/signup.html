@@ -7,6 +7,7 @@
     <h1 class="text-2xl font-bold text-gray-900 mb-6">Create your account</h1>
 
     <form hx-post="/auth/signup" hx-target="#message" hx-swap="innerHTML" class="space-y-4">
+        <input type="hidden" name="invite" id="invite-code">
         <div>
             <label for="first_name" class="block text-sm font-medium text-gray-700 mb-1">First name</label>
             <input type="text" id="first_name" name="first_name" required
@@ -58,4 +59,12 @@
         Already have an account? <a href="/login" class="text-brand-blue hover:underline">Log in</a>
     </p>
 </div>
+<script>
+    // Extract invite code from URL and populate hidden field
+    const params = new URLSearchParams(window.location.search);
+    const invite = params.get('invite');
+    if (invite) {
+        document.getElementById('invite-code').value = invite;
+    }
+</script>
 {% endblock %}
