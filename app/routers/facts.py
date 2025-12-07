@@ -106,8 +106,8 @@ class VoteCreate(BaseModel):
     @field_validator("value")
     @classmethod
     def validate_value(cls, v: int) -> int:
-        if v < -3 or v > 3:
-            raise ValueError("Vote must be between -3 and 3")
+        if v not in (-1, 1):
+            raise ValueError("Vote must be -1 or 1")
         return v
 
 
@@ -190,7 +190,9 @@ async def update_fact_vote_stats(fact_id: int) -> None:
         """
         UPDATE facts SET
             vote_sum = COALESCE((SELECT SUM(value) FROM fact_votes WHERE fact_id = :fact_id), 0),
-            vote_count = (SELECT COUNT(*) FROM fact_votes WHERE fact_id = :fact_id)
+            vote_count = (SELECT COUNT(*) FROM fact_votes WHERE fact_id = :fact_id),
+            upvote_count = COALESCE((SELECT COUNT(*) FROM fact_votes WHERE fact_id = :fact_id AND value = 1), 0),
+            downvote_count = COALESCE((SELECT COUNT(*) FROM fact_votes WHERE fact_id = :fact_id AND value = -1), 0)
         WHERE id = :fact_id
         """,
         {"fact_id": fact_id},
@@ -264,9 +266,8 @@ async def can_view_fact(viewer_id: int | None, fact: dict) -> bool:
 
 def format_fact_response(fact: dict, user_vote: int | None = None) -> dict:
     """Format a fact for API response."""
-    vote_sum = fact["vote_sum"]
-    vote_count = fact["vote_count"]
-    average = vote_sum / vote_count if vote_count > 0 else 0
+    upvote_count = fact.get("upvote_count", 0)
+    downvote_count = fact.get("downvote_count", 0)
 
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
@@ -294,10 +295,8 @@ def format_fact_response(fact: dict, user_vote: int | None = None) -> dict:
         "mentions": mentions,
         "subject_user_id": fact["subject_user_id"],
         "subject_page_id": fact["subject_page_id"],
-        "vote_sum": vote_sum,
-        "vote_count": vote_count,
-        "average": average,
-        "display_level": round(average),
+        "upvote_count": upvote_count,
+        "downvote_count": downvote_count,
         "user_vote": user_vote,
         "is_public": is_public,
         "is_vetoed": is_vetoed,
@@ -629,7 +628,7 @@ async def vote_on_fact(
     payload: VoteCreate,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Vote on a fact (-3 to +3 scale)."""
+    """Vote on a fact (upvote +1 or downvote -1)."""
     user_id = current_user["id"]
 
     fact = await database.fetch_one(
@@ -684,19 +683,13 @@ async def vote_on_fact(
 
     # Get updated stats
     updated = await database.fetch_one(
-        "SELECT vote_sum, vote_count FROM facts WHERE id = :fact_id",
+        "SELECT upvote_count, downvote_count FROM facts WHERE id = :fact_id",
         {"fact_id": fact_id},
     )
 
-    vote_sum = updated["vote_sum"]
-    vote_count = updated["vote_count"]
-    average = vote_sum / vote_count if vote_count > 0 else 0
-
     return {
-        "vote_sum": vote_sum,
-        "vote_count": vote_count,
-        "average": average,
-        "display_level": round(average),
+        "upvote_count": updated["upvote_count"],
+        "downvote_count": updated["downvote_count"],
         "user_vote": user_vote,
     }
 
@@ -725,19 +718,13 @@ async def remove_vote(
     await update_fact_vote_stats(fact_id)
 
     updated = await database.fetch_one(
-        "SELECT vote_sum, vote_count FROM facts WHERE id = :fact_id",
+        "SELECT upvote_count, downvote_count FROM facts WHERE id = :fact_id",
         {"fact_id": fact_id},
     )
 
-    vote_sum = updated["vote_sum"]
-    vote_count = updated["vote_count"]
-    average = vote_sum / vote_count if vote_count > 0 else 0
-
     return {
-        "vote_sum": vote_sum,
-        "vote_count": vote_count,
-        "average": average,
-        "display_level": round(average),
+        "upvote_count": updated["upvote_count"],
+        "downvote_count": updated["downvote_count"],
         "user_vote": None,
     }
 

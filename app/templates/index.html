@@ -569,37 +569,8 @@
         }
     });
 
-    // Scale Voting System
+    // Simple Voting System
     let currentUserVotes = {}; // Track user's votes per post
-
-    function toggleVotePicker(postId, event) {
-        event.stopPropagation();
-        const picker = document.getElementById(`vote-picker-${postId}`);
-        if (!picker) return;
-
-        // Close any other open pickers
-        document.querySelectorAll('[id^="vote-picker-"]').forEach(p => {
-            if (p.id !== `vote-picker-${postId}`) {
-                p.classList.add('hidden');
-            }
-        });
-
-        if (picker.classList.contains('hidden')) {
-            picker.innerHTML = renderVotePicker(postId, currentUserVotes[postId] ?? null);
-            picker.classList.remove('hidden');
-
-            // Close picker when clicking outside
-            const closeHandler = (e) => {
-                if (!picker.contains(e.target) && !e.target.closest(`#vote-container-${postId}`)) {
-                    picker.classList.add('hidden');
-                    document.removeEventListener('click', closeHandler);
-                }
-            };
-            setTimeout(() => document.addEventListener('click', closeHandler), 0);
-        } else {
-            picker.classList.add('hidden');
-        }
-    }
 
     async function submitVote(postId, value, event) {
         event.stopPropagation();
@@ -634,38 +605,21 @@
 
             if (response.ok) {
                 const data = await response.json();
-                updateScaleDisplay(postId, data);
-                // Close picker
-                document.getElementById(`vote-picker-${postId}`).classList.add('hidden');
+                updateVoteDisplay(postId, data);
             }
         } catch (e) {
             console.error('Failed to vote:', e);
         }
     }
 
-    function updateScaleDisplay(postId, data) {
+    function updateVoteDisplay(postId, data) {
         // Update current user's vote
         currentUserVotes[postId] = data.user_vote;
 
-        // Update scale icon
-        const iconEl = document.getElementById(`scale-icon-${postId}`);
-        if (iconEl) {
-            const svg = iconEl.querySelector('svg');
-            if (svg) {
-                svg.outerHTML = renderScaleIcon(data.display_level, 24);
-            }
-        }
-
-        // Update vote badge
-        const badgeEl = document.getElementById(`vote-badge-${postId}`);
-        if (badgeEl) {
-            badgeEl.innerHTML = renderUserVoteBadge(data.user_vote);
-        }
-
-        // Update vote count (always show)
-        const countEl = document.getElementById(`vote-count-${postId}`);
-        if (countEl) {
-            countEl.textContent = data.vote_count;
+        // Re-render the vote buttons (user can vote since they just did)
+        const container = document.getElementById(`vote-container-${postId}`);
+        if (container) {
+            container.innerHTML = renderVoteButtons(postId, data.upvote_count, data.downvote_count, data.user_vote, true, 'post');
         }
     }
 
@@ -757,8 +711,9 @@
         }
 
         const token = localStorage.getItem('token');
-        const canVote = token && !comment.is_mine;
-        const voteButtonClass = canVote ? 'hover:opacity-80 cursor-pointer' : 'cursor-default';
+        const canVote = !!token;
+        const upvotes = comment.upvote_count || 0;
+        const downvotes = comment.downvote_count || 0;
 
         // Three dots menu with Delete (if own) and Report Abuse
         const menuItems = [];
@@ -822,12 +777,8 @@
                         <p class="text-gray-800 mt-1 whitespace-pre-wrap break-words text-sm" id="content-${comment.id}" data-full="${escapeHtml(content)}">${formatPostContent(displayContent)}</p>
                         ${showMoreButton}
                         <div class="flex items-center gap-3 mt-2 text-xs">
-                            <div class="relative" id="vote-container-${comment.id}">
-                                <button class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="toggleVotePicker(${comment.id}, event)"` : ''}>
-                                    <span id="scale-icon-${comment.id}" class="flex items-center">${renderScaleIcon(comment.display_level || 0, 20)}<span id="vote-badge-${comment.id}">${renderUserVoteBadge(comment.user_vote, 'small')}</span></span>
-                                    <span id="vote-count-${comment.id}" class="text-gray-500">${comment.vote_count}</span>
-                                </button>
-                                <div id="vote-picker-${comment.id}" class="hidden"></div>
+                            <div id="vote-container-${comment.id}">
+                                ${renderVoteButtons(comment.id, upvotes, downvotes, comment.user_vote, canVote, 'post')}
                             </div>
                             ${token ? `<button onclick="replyToComment(${rootPostId}, ${comment.id})" class="text-gray-500 hover:text-brand-blue">Reply</button>` : ''}
                         </div>

@@ -64,8 +64,8 @@ class VoteCreate(BaseModel):
     @field_validator("value")
     @classmethod
     def validate_value(cls, v: int) -> int:
-        if v < -3 or v > 3:
-            raise ValueError("Vote must be between -3 and 3")
+        if v not in (-1, 1):
+            raise ValueError("Vote must be -1 or 1")
         return v
 
 
@@ -244,7 +244,9 @@ async def update_vote_stats(post_id: int) -> None:
         """
         UPDATE posts SET
             vote_sum = COALESCE((SELECT SUM(value) FROM post_votes WHERE post_id = :post_id), 0),
-            vote_count = (SELECT COUNT(*) FROM post_votes WHERE post_id = :post_id)
+            vote_count = (SELECT COUNT(*) FROM post_votes WHERE post_id = :post_id),
+            upvote_count = COALESCE((SELECT COUNT(*) FROM post_votes WHERE post_id = :post_id AND value = 1), 0),
+            downvote_count = COALESCE((SELECT COUNT(*) FROM post_votes WHERE post_id = :post_id AND value = -1), 0)
         WHERE id = :post_id
         """,
         {"post_id": post_id},
@@ -344,9 +346,8 @@ def format_post_response(
     post: dict, user_id: int | None, user_vote: int | None = None, media: list[dict] | None = None, page_info: dict | None = None
 ) -> dict:
     """Format a post for API response."""
-    vote_sum = post["vote_sum"]
-    vote_count = post["vote_count"]
-    average = vote_sum / vote_count if vote_count > 0 else 0
+    upvote_count = post.get("upvote_count", 0)
+    downvote_count = post.get("downvote_count", 0)
 
     # For page posts, hide the actual author - the page is the public face
     is_page_post = page_info is not None
@@ -359,10 +360,8 @@ def format_post_response(
         "visibility": post["visibility"],
         "reply_to_id": post["reply_to_id"],
         "root_post_id": post["root_post_id"],
-        "vote_sum": vote_sum,
-        "vote_count": vote_count,
-        "average": average,
-        "display_level": round(average),
+        "upvote_count": upvote_count,
+        "downvote_count": downvote_count,
         "comment_count": post["comment_count"],
         "user_vote": user_vote,
         "is_mine": user_id is not None and post["author_id"] == user_id,
@@ -887,16 +886,12 @@ async def vote_on_post(
     payload: VoteCreate,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    """Vote on a post (-3 to +3 scale)."""
+    """Vote on a post (upvote +1 or downvote -1)."""
     user_id = current_user["id"]
 
     post = await get_post_by_id(post_id)
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
-
-    # Can't vote on own posts/comments
-    if post["author_id"] == user_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot vote on your own post")
 
     # Check visibility
     root_post = await get_root_post(dict(post))
@@ -934,19 +929,13 @@ async def vote_on_post(
 
     # Get updated stats
     updated = await database.fetch_one(
-        "SELECT vote_sum, vote_count FROM posts WHERE id = :post_id",
+        "SELECT upvote_count, downvote_count FROM posts WHERE id = :post_id",
         {"post_id": post_id},
     )
 
-    vote_sum = updated["vote_sum"]
-    vote_count = updated["vote_count"]
-    average = vote_sum / vote_count if vote_count > 0 else 0
-
     return {
-        "vote_sum": vote_sum,
-        "vote_count": vote_count,
-        "average": average,
-        "display_level": round(average),
+        "upvote_count": updated["upvote_count"],
+        "downvote_count": updated["downvote_count"],
         "user_vote": user_vote,
     }
 
@@ -978,19 +967,13 @@ async def remove_vote(
 
     # Get updated stats
     updated = await database.fetch_one(
-        "SELECT vote_sum, vote_count FROM posts WHERE id = :post_id",
+        "SELECT upvote_count, downvote_count FROM posts WHERE id = :post_id",
         {"post_id": post_id},
     )
 
-    vote_sum = updated["vote_sum"]
-    vote_count = updated["vote_count"]
-    average = vote_sum / vote_count if vote_count > 0 else 0
-
     return {
-        "vote_sum": vote_sum,
-        "vote_count": vote_count,
-        "average": average,
-        "display_level": round(average),
+        "upvote_count": updated["upvote_count"],
+        "downvote_count": updated["downvote_count"],
         "user_vote": None,
     }
 

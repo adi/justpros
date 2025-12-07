@@ -121,135 +121,75 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// --- Scale Voting System ---
+// --- Simple Voting System (Reddit-style) ---
 
-const SCALE_COLORS = {
-    '-3': '#dc2626', '-2': '#ef4444', '-1': '#f87171',
-    '0': '#9ca3af',
-    '1': '#4ade80', '2': '#22c55e', '3': '#16a34a'
-};
+const UPVOTE_COLOR = '#16a34a';  // Green for upvotes
+const DOWNVOTE_COLOR = '#dc2626';  // Red for downvotes
+const DISABLED_COLOR = '#9ca3af';  // Gray for disabled
 
-function getScaleColor(level) {
-    const clamped = Math.round(Math.max(-3, Math.min(3, level)));
-    return SCALE_COLORS[clamped.toString()];
-}
-
-function renderGaugeIcon(level, size = 24) {
-    const displayLevel = Math.max(-3, Math.min(3, level));
-    const color = getScaleColor(Math.round(displayLevel));
-
-    // Gauge geometry: semi-circle from left to right
-    const cx = 12, cy = 15;  // Center of the arc
-    const r = 9;             // Radius
-
-    // Needle angle: -3 = 180° (left), 0 = 90° (up), +3 = 0° (right)
-    const needleAngle = (90 - displayLevel * 30) * Math.PI / 180;
-    const needleLen = 7;
-    const needleX = cx + needleLen * Math.cos(needleAngle);
-    const needleY = cy - needleLen * Math.sin(needleAngle);
-
-    // Arc path (semi-circle from left to right)
-    const arcStartX = cx - r;
-    const arcEndX = cx + r;
-
-    // Format score for tooltip
-    const scoreText = level > 0 ? `+${level}` : level.toString();
-
+function renderUpArrow(isActive = false, disabled = false) {
+    const color = disabled ? DISABLED_COLOR : (isActive ? UPVOTE_COLOR : 'currentColor');
+    const fill = isActive && !disabled ? UPVOTE_COLOR : 'none';
     return `
-        <svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-label="Average score: ${scoreText}">
-            <title>Average score: ${scoreText}</title>
-            <defs>
-                <linearGradient id="gauge-gradient-${size}" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stop-color="${SCALE_COLORS['-3']}"/>
-                    <stop offset="25%" stop-color="${SCALE_COLORS['-1']}"/>
-                    <stop offset="50%" stop-color="${SCALE_COLORS['0']}"/>
-                    <stop offset="75%" stop-color="${SCALE_COLORS['1']}"/>
-                    <stop offset="100%" stop-color="${SCALE_COLORS['3']}"/>
-                </linearGradient>
-            </defs>
-            <!-- Gauge arc background -->
-            <path d="M ${arcStartX} ${cy} A ${r} ${r} 0 0 1 ${arcEndX} ${cy}"
-                  fill="none" stroke="#e5e7eb" stroke-width="3" stroke-linecap="round"/>
-            <!-- Gauge arc colored -->
-            <path d="M ${arcStartX} ${cy} A ${r} ${r} 0 0 1 ${arcEndX} ${cy}"
-                  fill="none" stroke="url(#gauge-gradient-${size})" stroke-width="2" stroke-linecap="round"/>
-            <!-- Needle -->
-            <line x1="${cx}" y1="${cy}" x2="${needleX.toFixed(1)}" y2="${needleY.toFixed(1)}"
-                  stroke="${color}" stroke-width="2" stroke-linecap="round"/>
-            <!-- Center dot -->
-            <circle cx="${cx}" cy="${cy}" r="2" fill="${color}"/>
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="${fill}" stroke="${color}" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/>
         </svg>
     `;
 }
 
-function renderUserVoteBadge(userVote, size = 'normal') {
-    if (userVote === null || userVote === undefined) return '';
-    const color = SCALE_COLORS[userVote.toString()];
-    const label = userVote > 0 ? `+${userVote}` : userVote.toString();
-    const sizeClasses = size === 'small' ? 'w-4 h-4 text-[9px]' : 'w-5 h-5 text-[10px]';
+function renderDownArrow(isActive = false, disabled = false) {
+    const color = disabled ? DISABLED_COLOR : (isActive ? DOWNVOTE_COLOR : 'currentColor');
+    const fill = isActive && !disabled ? DOWNVOTE_COLOR : 'none';
     return `
-        <span class="${sizeClasses} rounded-full flex items-center justify-center text-white font-bold shadow-sm ml-1"
-              style="background-color: ${color}">
-            ${label}
-        </span>
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="${fill}" stroke="${color}" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+        </svg>
     `;
 }
 
-// Keep old name as alias for compatibility
+function renderVoteButtons(itemId, upvotes, downvotes, userVote, canVote, voteType = 'post') {
+    const isUpvoted = userVote === 1;
+    const isDownvoted = userVote === -1;
+    const disabled = !canVote;
+    const upvoteColor = isUpvoted && canVote ? `color: ${UPVOTE_COLOR}; font-weight: 600;` : '';
+    const downvoteColor = isDownvoted && canVote ? `color: ${DOWNVOTE_COLOR}; font-weight: 600;` : '';
+    const textColor = disabled ? `color: ${DISABLED_COLOR};` : '';
+
+    const voteFunc = voteType === 'post' ? 'submitVote' : 'submitFactVote';
+    const upClick = canVote ? `onclick="${voteFunc}(${itemId}, ${isUpvoted ? 'null' : '1'}, event)"` : '';
+    const downClick = canVote ? `onclick="${voteFunc}(${itemId}, ${isDownvoted ? 'null' : '-1'}, event)"` : '';
+    const cursorClass = canVote ? 'cursor-pointer hover:bg-gray-100' : 'cursor-default';
+
+    return `
+        <div class="flex items-center border border-gray-200 rounded-full bg-gray-50">
+            <button ${upClick} class="flex items-center gap-1 px-2 py-1 rounded-l-full ${cursorClass}" style="${upvoteColor || textColor}">
+                ${renderUpArrow(isUpvoted, disabled)}
+                <span id="${voteType}-upvotes-${itemId}">${upvotes}</span>
+            </button>
+            <div class="w-px h-5 bg-gray-200"></div>
+            <button ${downClick} class="flex items-center gap-1 px-2 py-1 rounded-r-full ${cursorClass}" style="${downvoteColor || textColor}">
+                ${renderDownArrow(isDownvoted, disabled)}
+                <span id="${voteType}-downvotes-${itemId}">${downvotes}</span>
+            </button>
+        </div>
+    `;
+}
+
+// Legacy functions for backward compatibility (deprecated)
+function renderGaugeIcon(level, size = 24) {
+    return ''; // No longer used
+}
+
+function renderUserVoteBadge(userVote, size = 'normal') {
+    return ''; // No longer used
+}
+
 function renderScaleIcon(level, size = 24) {
-    return renderGaugeIcon(level, size);
+    return ''; // No longer used
 }
 
 function renderVotePicker(postId, userVote) {
-    // Button order: [-3][-2][-1][X][+1][+2][+3]
-    const voteButtons = [-3, -2, -1].map(v => {
-        const isSelected = userVote === v;
-        const color = SCALE_COLORS[v.toString()];
-        const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-2' : '';
-        return `
-            <button onclick="submitVote(${postId}, ${v}, event)"
-                    class="w-8 h-8 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
-                    style="background-color: ${color}"
-                    title="${v}">
-                ${v}
-            </button>
-        `;
-    });
-
-    // X button for unvote (in the middle)
-    voteButtons.push(`
-        <button onclick="submitVote(${postId}, null, event)"
-                class="w-8 h-8 rounded-full hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
-                style="background-color: ${SCALE_COLORS['0']}"
-                title="Remove vote">
-            ✕
-        </button>
-    `);
-
-    // Positive votes
-    [1, 2, 3].forEach(v => {
-        const isSelected = userVote === v;
-        const color = SCALE_COLORS[v.toString()];
-        const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-2' : '';
-        const label = `+${v}`;
-        voteButtons.push(`
-            <button onclick="submitVote(${postId}, ${v}, event)"
-                    class="w-8 h-8 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
-                    style="background-color: ${color}"
-                    title="${label}">
-                ${label}
-            </button>
-        `);
-    });
-
-    return `
-        <div class="vote-picker absolute left-0 mt-2 bg-white shadow-lg rounded-xl p-3 z-50 border border-gray-200"
-             onclick="event.stopPropagation()">
-            <div class="flex items-center gap-1.5">
-                ${voteButtons.join('')}
-            </div>
-        </div>
-    `;
+    return ''; // No longer used - voting is now inline
 }
 
 // --- Post Rendering ---
@@ -298,13 +238,16 @@ function renderPost(post, options = {}) {
 
     const timeStr = formatTime(post.created_at);
     const token = localStorage.getItem('token');
-    const canVote = token && !post.is_mine;
-    const voteButtonClass = canVote ? 'hover:opacity-80 cursor-pointer' : 'cursor-default';
+    const canVote = !!token;
 
     // Track user's vote
     if (post.user_vote !== null && currentUserVotes) {
         currentUserVotes[post.id] = post.user_vote;
     }
+
+    // Vote counts
+    const upvotes = post.upvote_count || 0;
+    const downvotes = post.downvote_count || 0;
 
     const visibilityIcon = renderVisibilityIcon(post.visibility || 'public');
     const postMenu = renderPostMenu(post, token);
@@ -378,12 +321,8 @@ function renderPost(post, options = {}) {
                 </div>
                 ${renderPostMedia(post.media)}
                 <div class="flex items-center gap-4 mt-3 text-sm">
-                    <div class="relative" id="vote-container-${post.id}">
-                        <button class="flex items-center gap-1.5 ${voteButtonClass}" ${canVote ? `onclick="toggleVotePicker(${post.id}, event)"` : ''}>
-                            <span id="scale-icon-${post.id}" class="flex items-center">${renderScaleIcon(post.display_level || 0, 24)}<span id="vote-badge-${post.id}">${renderUserVoteBadge(post.user_vote)}</span></span>
-                            <span id="vote-count-${post.id}" class="text-gray-500">${post.vote_count || 0}</span>
-                        </button>
-                        <div id="vote-picker-${post.id}" class="hidden"></div>
+                    <div id="vote-container-${post.id}">
+                        ${renderVoteButtons(post.id, upvotes, downvotes, post.user_vote, canVote, 'post')}
                     </div>
                     ${commentButton}
                 </div>

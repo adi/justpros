@@ -1052,8 +1052,8 @@
     }
 
     function renderFact(fact) {
-        const vote_count = fact.vote_count || 0;
-        const level = fact.display_level || 0;
+        const upvotes = fact.upvote_count || 0;
+        const downvotes = fact.downvote_count || 0;
         const token = localStorage.getItem('token');
         const canVote = token && fact.is_public && !fact.is_vetoed && !isOwner;
 
@@ -1074,9 +1074,6 @@
             </button>
         ` : '';
 
-        // Vote button class based on whether user can vote
-        const voteButtonClass = canVote ? 'hover:opacity-80 cursor-pointer' : 'cursor-default';
-
         return `
             <div class="px-6 py-4 flex items-start gap-4" data-fact-id="${fact.id}">
                 <div class="flex-1 min-w-0">
@@ -1087,16 +1084,7 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2 flex-shrink-0">
-                    <div class="relative" id="fact-vote-container-${fact.id}">
-                        <button class="flex items-center gap-1 ${voteButtonClass}" ${canVote ? `onclick="toggleFactVotePicker(${fact.id}, event)"` : ''}>
-                            <span class="flex items-center">
-                                ${renderGaugeIcon(level, 24)}
-                                ${renderUserVoteBadge(fact.user_vote)}
-                            </span>
-                            <span class="text-gray-500 text-sm">${vote_count}</span>
-                        </button>
-                        <div id="fact-vote-picker-${fact.id}" class="hidden"></div>
-                    </div>
+                    ${renderVoteButtons(fact.id, upvotes, downvotes, fact.user_vote, canVote, 'fact')}
                     ${deleteBtn}
                 </div>
             </div>
@@ -1130,118 +1118,12 @@
         }
     }
 
-    async function voteOnFact(factId, value) {
-        const token = localStorage.getItem('token');
-        try {
-            const response = await fetch(`/api/facts/${factId}/vote`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ value })
-            });
-
-            if (response.ok) {
-                await loadFacts();
-            } else {
-                const data = await response.json();
-                alert(data.detail || 'Failed to vote');
-            }
-        } catch (e) {
-            alert('Failed to vote');
-        }
-    }
-
-    function toggleFactVotePicker(factId, event) {
-        event.stopPropagation();
-
-        // Close any other open vote pickers
-        document.querySelectorAll('[id^="fact-vote-picker-"]').forEach(picker => {
-            if (picker.id !== `fact-vote-picker-${factId}`) {
-                picker.classList.add('hidden');
-                picker.innerHTML = '';
-            }
-        });
-
-        const picker = document.getElementById(`fact-vote-picker-${factId}`);
-        if (picker.classList.contains('hidden')) {
-            // Find current user vote for this fact
-            const fact = factsData.find(f => f.id === factId);
-            const userVote = fact ? fact.user_vote : null;
-            picker.innerHTML = renderFactVotePickerContent(factId, userVote);
-            picker.classList.remove('hidden');
-        } else {
-            picker.classList.add('hidden');
-            picker.innerHTML = '';
-        }
-    }
-
-    function renderFactVotePickerContent(factId, userVote) {
-        // Button order: [-3][-2][-1][X][+1][+2][+3]
-        const voteButtons = [-3, -2, -1].map(v => {
-            const isSelected = userVote === v;
-            const color = SCALE_COLORS[v.toString()];
-            const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-2' : '';
-            return `
-                <button onclick="submitFactVote(${factId}, ${v}, event)"
-                        class="w-8 h-8 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
-                        style="background-color: ${color}"
-                        title="${v}">
-                    ${v}
-                </button>
-            `;
-        });
-
-        // X button for unvote (in the middle)
-        voteButtons.push(`
-            <button onclick="submitFactVote(${factId}, null, event)"
-                    class="w-8 h-8 rounded-full hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
-                    style="background-color: ${SCALE_COLORS['0']}"
-                    title="Remove vote">
-                ✕
-            </button>
-        `);
-
-        // Positive votes
-        [1, 2, 3].forEach(v => {
-            const isSelected = userVote === v;
-            const color = SCALE_COLORS[v.toString()];
-            const ring = isSelected ? 'ring-2 ring-brand-blue ring-offset-2' : '';
-            const label = `+${v}`;
-            voteButtons.push(`
-                <button onclick="submitFactVote(${factId}, ${v}, event)"
-                        class="w-8 h-8 rounded-full ${ring} hover:scale-110 transition-transform flex items-center justify-center text-white text-xs font-bold"
-                        style="background-color: ${color}"
-                        title="${label}">
-                    ${label}
-                </button>
-            `);
-        });
-
-        return `
-            <div class="absolute right-0 mt-2 bg-white shadow-lg rounded-xl p-3 z-50 border border-gray-200"
-                 onclick="event.stopPropagation()">
-                <div class="flex items-center gap-1.5">
-                    ${voteButtons.join('')}
-                </div>
-            </div>
-        `;
-    }
-
     async function submitFactVote(factId, value, event) {
         event.stopPropagation();
-
-        // Close picker
-        const picker = document.getElementById(`fact-vote-picker-${factId}`);
-        if (picker) {
-            picker.classList.add('hidden');
-            picker.innerHTML = '';
-        }
+        const token = localStorage.getItem('token');
 
         if (value === null) {
             // Remove vote
-            const token = localStorage.getItem('token');
             try {
                 const response = await fetch(`/api/facts/${factId}/vote`, {
                     method: 'DELETE',
@@ -1254,19 +1136,28 @@
                 console.error('Failed to remove vote:', e);
             }
         } else {
-            await voteOnFact(factId, value);
+            // Submit vote
+            try {
+                const response = await fetch(`/api/facts/${factId}/vote`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ value })
+                });
+
+                if (response.ok) {
+                    await loadFacts();
+                } else {
+                    const data = await response.json();
+                    alert(data.detail || 'Failed to vote');
+                }
+            } catch (e) {
+                alert('Failed to vote');
+            }
         }
     }
-
-    // Close fact vote pickers when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('[id^="fact-vote-container-"]')) {
-            document.querySelectorAll('[id^="fact-vote-picker-"]').forEach(picker => {
-                picker.classList.add('hidden');
-                picker.innerHTML = '';
-            });
-        }
-    });
 
     // --- Add Fact Modal ---
 
