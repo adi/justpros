@@ -1,7 +1,7 @@
 -- Consolidated Schema for JustPros
--- This file documents the current database structure as of migration 0017
+-- This file documents the current database structure as of migration 0025
 -- DO NOT RUN THIS FILE - it's for reference only
--- The actual migrations (0001-0017) should be used for database setup
+-- The actual migrations (0001-0025) should be used for database setup
 
 -- ============================================================================
 -- USERS TABLE
@@ -95,12 +95,76 @@ CREATE INDEX idx_conversation_reads_user ON conversation_reads(user_id);
 
 
 -- ============================================================================
+-- PAGES TABLE
+-- Organization/entity profiles (companies, events, products, communities, etc.)
+-- ============================================================================
+CREATE TABLE pages (
+    id SERIAL PRIMARY KEY,
+    handle VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    kind VARCHAR(20) NOT NULL,
+    tagline VARCHAR(200),
+    description TEXT,
+    icon_path VARCHAR(500),
+    cover_path VARCHAR(500),
+    website VARCHAR(500),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pages_kind_check CHECK (kind IN ('company', 'event', 'product', 'community', 'virtual', 'education'))
+);
+
+CREATE INDEX idx_pages_handle ON pages(handle);
+CREATE INDEX idx_pages_kind ON pages(kind);
+
+
+-- ============================================================================
+-- PAGE_EDITORS TABLE
+-- Users who can manage and post on behalf of pages
+-- ============================================================================
+CREATE TABLE page_editors (
+    id SERIAL PRIMARY KEY,
+    page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL DEFAULT 'editor',
+    invited_by INTEGER REFERENCES users(id),
+    invited_at TIMESTAMPTZ,
+    accepted_at TIMESTAMPTZ,
+
+    CONSTRAINT page_editors_unique UNIQUE (page_id, user_id),
+    CONSTRAINT page_editors_role_check CHECK (role IN ('owner', 'editor'))
+);
+
+CREATE INDEX idx_page_editors_page ON page_editors(page_id);
+CREATE INDEX idx_page_editors_user ON page_editors(user_id);
+
+
+-- ============================================================================
+-- PAGE_FOLLOWS TABLE
+-- Users following pages to see their posts in feed
+-- ============================================================================
+CREATE TABLE page_follows (
+    id SERIAL PRIMARY KEY,
+    page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT page_follows_unique UNIQUE (page_id, user_id)
+);
+
+CREATE INDEX idx_page_follows_page ON page_follows(page_id);
+CREATE INDEX idx_page_follows_user ON page_follows(user_id);
+
+
+-- ============================================================================
 -- POSTS TABLE
 -- User posts with visibility controls and comment threading
+-- Can be posted by users or on behalf of pages
 -- ============================================================================
 CREATE TABLE posts (
     id SERIAL PRIMARY KEY,
     author_id INTEGER NOT NULL REFERENCES users(id),
+    page_id INTEGER REFERENCES pages(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     visibility VARCHAR(20) NOT NULL DEFAULT 'connections',
     reply_to_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
@@ -108,6 +172,8 @@ CREATE TABLE posts (
     comment_count INTEGER NOT NULL DEFAULT 0,
     vote_sum INTEGER NOT NULL DEFAULT 0,
     vote_count INTEGER NOT NULL DEFAULT 0,
+    upvote_count INTEGER NOT NULL DEFAULT 0,
+    downvote_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT posts_content_length CHECK (char_length(content) <= 2000),
@@ -115,6 +181,7 @@ CREATE TABLE posts (
 );
 
 CREATE INDEX idx_posts_author ON posts(author_id, created_at DESC);
+CREATE INDEX idx_posts_page ON posts(page_id, created_at DESC) WHERE page_id IS NOT NULL;
 CREATE INDEX idx_posts_feed ON posts(created_at DESC) WHERE reply_to_id IS NULL;
 CREATE INDEX idx_posts_public_feed ON posts(created_at DESC) WHERE reply_to_id IS NULL AND visibility = 'public';
 CREATE INDEX idx_posts_replies ON posts(reply_to_id, created_at) WHERE reply_to_id IS NOT NULL;
@@ -141,7 +208,7 @@ CREATE INDEX idx_post_media_post ON post_media(post_id, display_order);
 
 -- ============================================================================
 -- POST_VOTES TABLE
--- User votes on posts (scaled -3 to +3 based on trustworthiness)
+-- Binary user votes on posts (-1 downvote, +1 upvote)
 -- ============================================================================
 CREATE TABLE post_votes (
     post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -150,10 +217,77 @@ CREATE TABLE post_votes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     PRIMARY KEY (post_id, user_id),
-    CONSTRAINT post_votes_value_check CHECK (value >= -3 AND value <= 3)
+    CONSTRAINT post_votes_value_check CHECK (value IN (-1, 1))
 );
 
 CREATE INDEX idx_post_votes_user ON post_votes(user_id);
+
+
+-- ============================================================================
+-- FACTS TABLE
+-- Professional facts about users or pages (e.g., "I worked at @company")
+-- ============================================================================
+CREATE TABLE facts (
+    id SERIAL PRIMARY KEY,
+    author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subject_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    subject_page_id INTEGER REFERENCES pages(id) ON DELETE CASCADE,
+    template_id VARCHAR(50),
+    content TEXT NOT NULL,
+    mentions JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    public_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '72 hours',
+    approved_at TIMESTAMPTZ,
+    vetoed_at TIMESTAMPTZ,
+    vote_sum INTEGER NOT NULL DEFAULT 0,
+    vote_count INTEGER NOT NULL DEFAULT 0,
+    upvote_count INTEGER NOT NULL DEFAULT 0,
+    downvote_count INTEGER NOT NULL DEFAULT 0,
+
+    CONSTRAINT facts_one_subject CHECK (
+        (subject_user_id IS NOT NULL AND subject_page_id IS NULL) OR
+        (subject_user_id IS NULL AND subject_page_id IS NOT NULL)
+    ),
+    CONSTRAINT facts_not_self CHECK (author_id != subject_user_id)
+);
+
+CREATE INDEX idx_facts_author ON facts(author_id);
+CREATE INDEX idx_facts_subject_user ON facts(subject_user_id) WHERE subject_user_id IS NOT NULL;
+CREATE INDEX idx_facts_subject_page ON facts(subject_page_id) WHERE subject_page_id IS NOT NULL;
+CREATE INDEX idx_facts_public ON facts(public_at) WHERE vetoed_at IS NULL;
+
+
+-- ============================================================================
+-- FACT_VOTES TABLE
+-- Binary user votes on facts (-1 downvote, +1 upvote)
+-- ============================================================================
+CREATE TABLE fact_votes (
+    fact_id INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    value SMALLINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    PRIMARY KEY (fact_id, user_id),
+    CONSTRAINT fact_votes_value_check CHECK (value IN (-1, 1))
+);
+
+CREATE INDEX idx_fact_votes_user ON fact_votes(user_id);
+
+
+-- ============================================================================
+-- INVITE_CODES TABLE
+-- Personal invite codes for user referrals
+-- ============================================================================
+CREATE TABLE invite_codes (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code VARCHAR(20) NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT invite_codes_user_unique UNIQUE (user_id)
+);
+
+CREATE INDEX idx_invite_codes_code ON invite_codes(code);
 
 
 -- ============================================================================
